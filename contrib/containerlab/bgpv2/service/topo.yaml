@@ -39,9 +39,9 @@ topology:
         -c '  neighbor CILIUM peer-group'
         -c '  neighbor CILIUM remote-as external'
         -c '  neighbor CILIUM password cilium123'
-        -c '  neighbor fd00:10:0:1::2 peer-group CILIUM'
-        -c '  neighbor fd00:10:0:2::2 peer-group CILIUM'
+        -c '  bgp listen range 10.0.2.0/24 peer-group CILIUM'
         -c '!'
+    # bgp listen range 10.2.0.0/24 peer-group SERVERS
     # Server with Cilium. It shares netns with kind node.
     server0:
       kind: linux
@@ -53,6 +53,7 @@ topology:
       # These static routes are needed because Cilium cannot import routes currently.
       - ip route add 10.0.0.0/8 via 10.0.1.1 dev net0
       - ip route add fd00::/16 via fd00:10:0:1::1 dev net0
+      - ip route replace default via 10.0.1.1 dev net0
     # Server with Cilium. It shares netns with kind node.
     server1:
       kind: linux
@@ -65,6 +66,7 @@ topology:
       - ip route add fd00:10:0:0::1/128 via fd00:10:0:1::1 dev net0 # loopback of router0
       - ip route add 10.0.0.0/8 via 10.0.2.1 dev net0
       - ip route add fd00::/16 via fd00:10:0:2::1 dev net0
+      - ip route replace default via 10.0.2.1 dev net0
     # Server without Cilium. Useful for testing connectivity.
     server2:
       kind: linux

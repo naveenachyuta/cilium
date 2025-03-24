@@ -7,12 +7,12 @@ deploy:
 	# create secret for bgp
 	kubectl -n kube-system create secret generic --type=string bgp-auth-secret --from-literal=password=cilium123
 	# install cilium
-	helm install cilium -n kube-system cilium/cilium --version $(VERSION) -f values.yaml
-	cilium status --wait --namespace kube-system
+	# helm install cilium -n kube-system cilium/cilium --version $(VERSION) -f values.yaml
+	# cilium status --wait --namespace kube-system
 
 destroy:
 	sudo containerlab -t topo.yaml destroy -c
-	kind delete clusters bgpv2-cplane-dev-multi-homing
+	kind delete clusters bgpv2-cplane-dev-homing
 	rm -f .topo.yaml.bak
 
 reload:
@@ -21,3 +21,6 @@ reload:
 
 apply-bgp:
 	kubectl apply -f bgp.yaml
+
+delete-bgp:
+	kubectl delete -f bgp.yaml

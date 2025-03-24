@@ -494,6 +494,7 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					LinkIndex: index,
 					Scope:     uint8(u.Scope),
 					Dst:       ipnetToPrefix(u.Family, u.Dst),
+					Priority:  u.Priority,
 				}
 				r.Src, _ = netip.AddrFromSlice(u.Src)
 				r.Gw, _ = netip.AddrFromSlice(u.Gw)

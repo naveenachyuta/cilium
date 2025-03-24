@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"strings"
 
 	"github.com/cilium/hive/cell"
+	"github.com/cilium/statedb"
 
 	"github.com/cilium/cilium/pkg/bgpv1/manager/instance"
 	"github.com/cilium/cilium/pkg/bgpv1/manager/store"
@@ -24,6 +26,7 @@ import (
 // NeighborReconciler is a ConfigReconciler which reconciles the peers of the
 // provided BGP server with the provided CiliumBGPVirtualRouter.
 type NeighborReconciler struct {
+	DB           *statedb.DB
 	logger       *slog.Logger
 	SecretStore  store.BGPCPResourceStore[*slim_corev1.Secret]
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
@@ -39,6 +42,7 @@ type NeighborReconcilerOut struct {
 
 type NeighborReconcilerIn struct {
 	cell.In
+	DB           *statedb.DB
 	Logger       *slog.Logger
 	SecretStore  store.BGPCPResourceStore[*slim_corev1.Secret]
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
@@ -51,6 +55,7 @@ func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
 	return NeighborReconcilerOut{
 		Reconciler: &NeighborReconciler{
 			logger:       logger,
+			DB:           params.DB,
 			SecretStore:  params.SecretStore,
 			PeerConfig:   params.PeerConfig,
 			DaemonConfig: params.DaemonConfig,
@@ -116,6 +121,70 @@ func (r *NeighborReconciler) Cleanup(i *instance.BGPInstance) {
 	}
 }
 
+func takeColumns[T any](xs []T, idxs []int) (out []T) {
+	for _, idx := range idxs {
+		out = append(out, xs[idx])
+	}
+	return
+}
+
+func getColumnIndexes(names []string, header []string) ([]int, error) {
+	columnIndexes := make([]int, 0, len(header))
+loop:
+	for _, name := range names {
+		for i, name2 := range header {
+			if strings.EqualFold(name, name2) {
+				columnIndexes = append(columnIndexes, i)
+				continue loop
+			}
+		}
+		return nil, fmt.Errorf("column %q not part of %v", name, header)
+	}
+	return columnIndexes, nil
+}
+
+func (r *NeighborReconciler) getPeerAddress() string {
+	txn := r.DB.ReadTxn()
+	meta := r.DB.GetTable(txn, "routes")
+	tbl := statedb.AnyTable{Meta: meta}
+	a := tbl.All(txn)
+	for obj := range a {
+		fmt.Println("object", obj)
+		header := tbl.TableHeader()
+
+		var idxs []int
+		var err error
+
+		idxs, err = getColumnIndexes(header, header)
+
+		fmt.Println("idxsss", idxs, err)
+
+		fmt.Println("header123", header)
+	}
+	for obj := range a {
+		header := tbl.TableHeader()
+		idxs, err := getColumnIndexes(header, header)
+		if err != nil {
+			fmt.Println("error", err)
+		}
+		row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
+		fmt.Println("rorrrwwwwww", row)
+		if row[0] == "0.0.0.0/0" {
+			fmt.Println("defaut", row[2])
+			return row[2]
+		}
+
+	}
+	allTbls := r.DB.GetTables(txn)
+	fmt.Println(allTbls, "llsdlfldsflsd")
+	for _, tbls := range allTbls {
+		fmt.Println("llklklklklklkkl")
+		fmt.Println(tbls.Name())
+		fmt.Println(tbls.Indexes())
+	}
+	return ""
+}
+
 func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) error {
 	if err := p.ValidateParams(); err != nil {
 		return err
@@ -147,14 +216,19 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 		if n.PeerASN == nil {
 			return fmt.Errorf("peer %s does not have a PeerASN", n.Name)
 		}
-
+		var defaultGateway string
 		if n.PeerAddress == nil {
-			r.logger.Debug("Peer does not have PeerAddress configured, skipping", types.PeerLogField, n.Name)
-			continue
+			defaultGateway = r.getPeerAddress()
+			if defaultGateway == "" {
+				r.logger.Debug("Peer does not have PeerAddress configured, skipping", types.PeerLogField, n.Name)
+				continue
+			}
 		}
-
+		if defaultGateway != "" {
+			newNeigh[i].PeerAddress = &defaultGateway
+		}
 		var (
-			key = r.neighborID(&n)
+			key = r.neighborID(&newNeigh[i])
 			h   *member
 			ok  bool
 		)
