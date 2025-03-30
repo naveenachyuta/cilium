@@ -9,14 +9,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"strings"
+	"sort"
 
 	"github.com/cilium/hive/cell"
+	"github.com/cilium/hive/job"
 	"github.com/cilium/statedb"
 
+	"github.com/cilium/cilium/pkg/bgpv1/agent/signaler"
 	"github.com/cilium/cilium/pkg/bgpv1/manager/instance"
 	"github.com/cilium/cilium/pkg/bgpv1/manager/store"
 	"github.com/cilium/cilium/pkg/bgpv1/types"
+	"github.com/cilium/cilium/pkg/datapath/tables"
 	v2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
 	"github.com/cilium/cilium/pkg/k8s/resource"
 	slim_corev1 "github.com/cilium/cilium/pkg/k8s/slim/k8s/api/core/v1"
@@ -27,6 +30,7 @@ import (
 // provided BGP server with the provided CiliumBGPVirtualRouter.
 type NeighborReconciler struct {
 	DB           *statedb.DB
+	JobGroup     job.Group
 	logger       *slog.Logger
 	SecretStore  store.BGPCPResourceStore[*slim_corev1.Secret]
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
@@ -42,20 +46,48 @@ type NeighborReconcilerOut struct {
 
 type NeighborReconcilerIn struct {
 	cell.In
-	DB           *statedb.DB
+
 	Logger       *slog.Logger
 	SecretStore  store.BGPCPResourceStore[*slim_corev1.Secret]
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
 	DaemonConfig *option.DaemonConfig
+
+	DB            *statedb.DB
+	JobGroup      job.Group
+	Signaler      *signaler.BGPCPSignaler
+	NeighborTable statedb.Table[*tables.Route]
 }
 
 func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
 	logger := params.Logger.With(types.ReconcilerLogField, "Neighbor")
 
+	/*
+
+			// Add observer for default gateway changes
+		    params.JobGroup.Add(
+		        job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
+		            route := event.Object
+
+		            // Check if this is a default route change
+		            if (route.Prefix == "0.0.0.0/0" || route.Prefix == "::/0") &&
+		               (event.Kind == statedb.ChangeKindAdd ||
+		                event.Kind == statedb.ChangeKindDelete ||
+		                event.Kind == statedb.ChangeKindUpdate) {
+
+		                // Trigger reconciliation when there's a change in default routes
+		                params.Signaler.Event(struct{}{})
+		                r.logger.Debug("Default gateway change detected, triggering BGP reconciliation")
+		            }
+		            return nil
+		        }, statedb.Observable(params.DB, tables.NewRouteTable())),
+		    )
+	*/
+
 	return NeighborReconcilerOut{
 		Reconciler: &NeighborReconciler{
 			logger:       logger,
 			DB:           params.DB,
+			JobGroup:     params.JobGroup,
 			SecretStore:  params.SecretStore,
 			PeerConfig:   params.PeerConfig,
 			DaemonConfig: params.DaemonConfig,
@@ -121,60 +153,49 @@ func (r *NeighborReconciler) Cleanup(i *instance.BGPInstance) {
 	}
 }
 
-func takeColumns[T any](xs []T, idxs []int) (out []T) {
-	for _, idx := range idxs {
-		out = append(out, xs[idx])
-	}
-	return
-}
+// func takeColumns[T any](xs []T, idxs []int) (out []T) {
+// 	for _, idx := range idxs {
+// 		out = append(out, xs[idx])
+// 	}
+// 	return
+// }
 
-func getColumnIndexes(names []string, header []string) ([]int, error) {
-	columnIndexes := make([]int, 0, len(header))
-loop:
-	for _, name := range names {
-		for i, name2 := range header {
-			if strings.EqualFold(name, name2) {
-				columnIndexes = append(columnIndexes, i)
-				continue loop
-			}
-		}
-		return nil, fmt.Errorf("column %q not part of %v", name, header)
-	}
-	return columnIndexes, nil
-}
+// func getColumnIndexes(names []string, header []string) ([]int, error) {
+// 	columnIndexes := make([]int, 0, len(header))
+// loop:
+// 	for _, name := range names {
+// 		for i, name2 := range header {
+// 			if strings.EqualFold(name, name2) {
+// 				columnIndexes = append(columnIndexes, i)
+// 				continue loop
+// 			}
+// 		}
+// 		return nil, fmt.Errorf("column %q not part of %v", name, header)
+// 	}
+// 	return columnIndexes, nil
+// }
 
-func (r *NeighborReconciler) getPeerAddress() string {
+func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, error) {
+	// addressFamily = netlink.FAMILY_V4
+	fmt.Println(addressFamily)
 	txn := r.DB.ReadTxn()
 	meta := r.DB.GetTable(txn, "routes")
 	tbl := statedb.AnyTable{Meta: meta}
-	a := tbl.All(txn)
-	for obj := range a {
-		fmt.Println("object", obj)
-		header := tbl.TableHeader()
+	objs := tbl.All(txn)
+	// for obj := range objs {
+	// 	fmt.Println("object", obj)
+	// 	header := tbl.TableHeader()
 
-		var idxs []int
-		var err error
+	// 	var idxs []int
+	// 	var err error
 
-		idxs, err = getColumnIndexes(header, header)
+	// idxs, err = getColumnIndexes(header, header)
 
-		fmt.Println("idxsss", idxs, err)
+	// fmt.Println("idxsss", idxs, err)
 
-		fmt.Println("header123", header)
-	}
-	for obj := range a {
-		header := tbl.TableHeader()
-		idxs, err := getColumnIndexes(header, header)
-		if err != nil {
-			fmt.Println("error", err)
-		}
-		row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
-		fmt.Println("rorrrwwwwww", row)
-		if row[0] == "0.0.0.0/0" {
-			fmt.Println("defaut", row[2])
-			return row[2]
-		}
+	// fmt.Println("header123", header)
+	// }
 
-	}
 	allTbls := r.DB.GetTables(txn)
 	fmt.Println(allTbls, "llsdlfldsflsd")
 	for _, tbls := range allTbls {
@@ -182,7 +203,59 @@ func (r *NeighborReconciler) getPeerAddress() string {
 		fmt.Println(tbls.Name())
 		fmt.Println(tbls.Indexes())
 	}
-	return ""
+	defaultRoutes := [][]string{}
+	for obj := range objs {
+		// header := tbl.TableHeader()
+		// idxs, err := getColumnIndexes(header, header)
+		// if err != nil {
+		// 	fmt.Println("error", err)
+		// }
+		// row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
+		row := obj.(statedb.TableWritable).TableRow()
+		fmt.Println("rorrrwwwwww", row)
+		if row[0] == "0.0.0.0/0" && addressFamily == "ipv4" && row[2] != "" {
+			fmt.Println("defaut", row[2])
+			defaultRoutes = append(defaultRoutes, row)
+		} else if row[0] == "::/0" && addressFamily == "ipv6" && row[2] != "" {
+			defaultRoutes = append(defaultRoutes, row)
+		}
+	}
+	fmt.Println(defaultRoutes, ";;;;;")
+	if len(defaultRoutes) == 0 {
+		return "", fmt.Errorf("failed to get default gateways from route table")
+	}
+	sort.Slice(defaultRoutes, func(i, j int) bool {
+		return defaultRoutes[i][6] < defaultRoutes[j][6]
+	})
+	fmt.Println(defaultRoutes, ";;;;;ssssssss")
+	return defaultRoutes[0][2], nil
+}
+
+func (r *NeighborReconciler) configureDefaultGateway(defaultGateway *v2.DefaultGateway) (string, error) {
+	peerAddress, err := r.getDefaultGateway(defaultGateway.AddressFamily)
+	if err != nil {
+		return "", fmt.Errorf("failed to get default gateway %w", err)
+	}
+	if peerAddress == "" {
+		return peerAddress, fmt.Errorf("failed get default gateway. empty address")
+	}
+	/*
+			params.JobGroup.Add(
+		               job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
+
+		                       // Track default gateway state here. The `event`
+		                       // contains the route change event.
+
+		                       // Trigger reconciliation when there's a change.
+		                        if changed {
+		                            params.Signaler.Event(struct{}{})
+		                       }
+		                       return nil
+		               }, statedb.Observable(params.DB, params.NeighborTable)),
+		      )
+	*/
+
+	return "", nil
 }
 
 func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) error {
@@ -216,17 +289,32 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 		if n.PeerASN == nil {
 			return fmt.Errorf("peer %s does not have a PeerASN", n.Name)
 		}
-		var defaultGateway string
 		if n.PeerAddress == nil {
-			defaultGateway = r.getPeerAddress()
-			if defaultGateway == "" {
+			fmt.Println("==========")
+			fmt.Println(*n.PeerConfigRef)
+			fmt.Println(n.PeerASN)
+			fmt.Println(n.AutoDiscovery)
+			fmt.Println(*n.AutoDiscovery)
+			fmt.Println(n.AutoDiscovery.DefaultGateway)
+			fmt.Println(n.AutoDiscovery.Mode)
+			fmt.Println("==========")
+			autoDiscovery := n.AutoDiscovery
+			switch autoDiscovery.Mode {
+			case "default-gateway":
+				defaultGateway, err := r.configureDefaultGateway(autoDiscovery.DefaultGateway)
+				if err != nil {
+					r.logger.Error("failed to get default gateway", "error", err)
+				}
+				fmt.Println("fsdsds", defaultGateway, "lllll")
+				if defaultGateway != "" {
+					newNeigh[i].PeerAddress = &defaultGateway
+				}
+			default:
 				r.logger.Debug("Peer does not have PeerAddress configured, skipping", types.PeerLogField, n.Name)
 				continue
 			}
 		}
-		if defaultGateway != "" {
-			newNeigh[i].PeerAddress = &defaultGateway
-		}
+		fmt.Println(newNeigh[i], "lklskdls")
 		var (
 			key = r.neighborID(&newNeigh[i])
 			h   *member

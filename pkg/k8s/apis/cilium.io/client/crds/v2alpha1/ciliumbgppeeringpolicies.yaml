@@ -316,6 +316,32 @@ spec:
                               AuthSecretRef is the name of the secret to use to fetch a TCP
                               authentication password for this peer.
                             type: string
+                          autoDiscovery:
+                            description: AutoDiscovery is the configuration for auto-discovery
+                              of the peer address.
+                            properties:
+                              defaultGateway:
+                                description: defaultGateway is the configuration for
+                                  auto-discovery of the default gateway.
+                                properties:
+                                  addressFamily:
+                                    description: addressFamily is the address family
+                                      of the default gateway.
+                                    enum:
+                                    - ipv4
+                                    - ipv6
+                                    type: string
+                                required:
+                                - addressFamily
+                                type: object
+                              mode:
+                                description: mode is the mode of the auto-discovery.
+                                enum:
+                                - default-gateway
+                                type: string
+                            required:
+                            - mode
+                            type: object
                           connectRetryTimeSeconds:
                             default: 120
                             description: ConnectRetryTimeSeconds defines the initial

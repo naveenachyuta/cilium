@@ -235,6 +235,10 @@ type CiliumBGPNeighbor struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=4294967295
 	PeerASN int64 `json:"peerASN"`
+	// AutoDiscovery is the configuration for auto-discovery of the peer address.
+	//
+	// +kubebuilder:validation:Optional
+	AutoDiscovery *AutoDiscovery `json:"autoDiscovery,omitempty"`
 	// AuthSecretRef is the name of the secret to use to fetch a TCP
 	// authentication password for this peer.
 	// +kubebuilder:validation:Optional

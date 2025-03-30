@@ -114,6 +114,11 @@ type CiliumBGPPeer struct {
 	// +kubebuilder:validation:Pattern=`((^\s*((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))\s*$)|(^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$))`
 	PeerAddress *string `json:"peerAddress,omitempty"`
 
+	// AutoDiscovery is the configuration for auto-discovery of the peer address.
+	//
+	// +kubebuilder:validation:Optional
+	AutoDiscovery *AutoDiscovery `json:"autoDiscovery,omitempty"`
+
 	// PeerASN is the ASN of the peer BGP router.
 	// Supports extended 32bit ASNs.
 	//
@@ -131,6 +136,27 @@ type CiliumBGPPeer struct {
 	//
 	// +kubebuilder:validation:Optional
 	PeerConfigRef *PeerConfigReference `json:"peerConfigRef,omitempty"`
+}
+
+// AutoDiscovery is the configuration for auto-discovery of the peer address.
+type AutoDiscovery struct {
+	// mode is the mode of the auto-discovery.
+	//
+	// +kubebuilder:validation:Enum=default-gateway
+	Mode string `json:"mode"`
+
+	// defaultGateway is the configuration for auto-discovery of the default gateway.
+	//
+	// +kubebuilder:validation:Optional
+	DefaultGateway *DefaultGateway `json:"defaultGateway,omitempty"`
+}
+
+// DefaultGateway is the configuration for auto-discovery of the default gateway.
+type DefaultGateway struct {
+	// addressFamily is the address family of the default gateway.
+	//
+	// +kubebuilder:validation:Enum=ipv4;ipv6
+	AddressFamily string `json:"addressFamily"`
 }
 
 // PeerConfigReference is a reference to a peer configuration resource.

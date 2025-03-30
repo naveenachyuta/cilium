@@ -11,16 +11,29 @@ spec:
   - name: "65001"
     localASN: 65001
     peers:
-    - name: "65000"
+    - name: "65000 ipv4"
       peerASN: 65000
       # peerAddress: fd00:10::1
+      autoDiscovery:
+        mode: "default-gateway"
+        defaultGateway:
+          addressFamily: ipv4
       peerConfigRef:
         name: "cilium-peer"
-    - name: "65011"
-      peerASN: 65011
-      # peerAddress: fd00:11::1
-      peerConfigRef:
-        name: "cilium-peer"
+    # - name: "65000 ipv6"
+    #   peerASN: 65000
+    #   # peerAddress: fd00:10::1
+    #   autoDiscovery:
+    #     mode: "default-gateway"
+    #     defaultGateway:
+    #       addressFamily: ipv6
+    #   peerConfigRef:
+    #     name: "cilium-peer"
+    # - name: "65011"
+    #   peerASN: 65011
+    #   # peerAddress: fd00:11::1
+    #   peerConfigRef:
+    #     name: "cilium-peer"
 
 ---
 apiVersion: cilium.io/v2alpha1
