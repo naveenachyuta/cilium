@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"sort"
+	"strings"
 
 	"github.com/cilium/hive/cell"
 	"github.com/cilium/hive/job"
@@ -149,27 +150,20 @@ func (r *NeighborReconciler) Cleanup(i *instance.BGPInstance) {
 	}
 }
 
-// func takeColumns[T any](xs []T, idxs []int) (out []T) {
-// 	for _, idx := range idxs {
-// 		out = append(out, xs[idx])
-// 	}
-// 	return
-// }
-
-// func getColumnIndexes(names []string, header []string) ([]int, error) {
-// 	columnIndexes := make([]int, 0, len(header))
-// loop:
-// 	for _, name := range names {
-// 		for i, name2 := range header {
-// 			if strings.EqualFold(name, name2) {
-// 				columnIndexes = append(columnIndexes, i)
-// 				continue loop
-// 			}
-// 		}
-// 		return nil, fmt.Errorf("column %q not part of %v", name, header)
-// 	}
-// 	return columnIndexes, nil
-// }
+func getColumnIndexes(names []string, header []string) (map[string]int, error) {
+	columnIndexes := make(map[string]int)
+loop:
+	for _, name := range names {
+		for i, name2 := range header {
+			if strings.EqualFold(name, name2) {
+				columnIndexes[name] = i
+				continue loop
+			}
+		}
+		return nil, fmt.Errorf("column %q not part of %v", name, header)
+	}
+	return columnIndexes, nil
+}
 
 func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, error) {
 	// addressFamily = netlink.FAMILY_V4
@@ -192,41 +186,50 @@ func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, er
 	// fmt.Println("header123", header)
 	// }
 
-	allTbls := r.DB.GetTables(txn)
-	fmt.Println(allTbls, "llsdlfldsflsd")
-	for _, tbls := range allTbls {
-		fmt.Println("llklklklklklkkl")
-		fmt.Println(tbls.Name())
-		fmt.Println(tbls.Indexes())
-	}
+	// allTbls := r.DB.GetTables(txn)
+	// fmt.Println(allTbls, "llsdlfldsflsd")
+	// for _, tbls := range allTbls {
+	// 	fmt.Println("llklklklklklkkl")
+	// 	fmt.Println(tbls.Name())
+	// 	fmt.Println(tbls.Indexes())
+	// }
+	header := tbl.TableHeader()
 	defaultRoutes := [][]string{}
+	columns := []string{"Destination", "Source", "Gateway", "Priority", "LinkStatus"}
+	idxs, err := getColumnIndexes(columns, header)
+	if err != nil {
+		return "", err
+	}
+	//if rt.Flags&unix.RTNH_F_LINKDOWN != 0 || rt.Flags&unix.RTNH_F_DEAD != 0 {
+	// continue
+	// }
 	for obj := range objs {
-		// header := tbl.TableHeader()
-		// idxs, err := getColumnIndexes(header, header)
-		// if err != nil {
-		// 	fmt.Println("error", err)
-		// }
 		// row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
 		row := obj.(statedb.TableWritable).TableRow()
 		fmt.Println("rorrrwwwwww", row)
-		if row[0] == "0.0.0.0/0" && addressFamily == "ipv4" && row[2] != "" {
-			fmt.Println("defaut", row[2])
-			defaultRoutes = append(defaultRoutes, row)
-		} else if row[0] == "::/0" && addressFamily == "ipv6" && row[2] != "" {
-			defaultRoutes = append(defaultRoutes, row)
+		if row[idxs["Destination"]] != "" {
+			if row[idxs["Destination"]] == "0.0.0.0/0" && addressFamily == "ipv4" && row[idxs["LinkStatus"]] == "up" {
+				defaultRoutes = append(defaultRoutes, row)
+			} else if row[idxs["Destination"]] == "::/0" && addressFamily == "ipv6" && row[idxs["LinkStatus"]] == "up" {
+				defaultRoutes = append(defaultRoutes, row)
+			}
 		}
 	}
+	// netip.PrefixFrom(netip.IPv4Unspecified(), 0)
+
 	fmt.Println(defaultRoutes, ";;;;;")
 	if len(defaultRoutes) == 0 {
 		return "", fmt.Errorf("failed to get default gateways from route table")
 	}
+	// sort the default routes by priority
 	sort.Slice(defaultRoutes, func(i, j int) bool {
-		return defaultRoutes[i][6] < defaultRoutes[j][6]
+		return defaultRoutes[i][idxs["Priority"]] < defaultRoutes[j][idxs["Priority"]]
 	})
 	fmt.Println(defaultRoutes, ";;;;;ssssssss")
 	fmt.Println(defaultRoutes[0])
-	fmt.Println(defaultRoutes[0][2])
-	return defaultRoutes[0][2], nil
+	fmt.Println(defaultRoutes[0][idxs["Gateway"]])
+	// return the gateway address with lowest priority
+	return defaultRoutes[0][idxs["Gateway"]], nil
 }
 
 func (r *NeighborReconciler) configureDefaultGateway(defaultGateway *v2.DefaultGateway) (string, error) {
@@ -237,21 +240,6 @@ func (r *NeighborReconciler) configureDefaultGateway(defaultGateway *v2.DefaultG
 	if peerAddress == "" {
 		return peerAddress, fmt.Errorf("failed get default gateway. empty address")
 	}
-	/*
-			params.JobGroup.Add(
-		               job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
-
-		                       // Track default gateway state here. The `event`
-		                       // contains the route change event.
-
-		                       // Trigger reconciliation when there's a change.
-		                        if changed {
-		                            params.Signaler.Event(struct{}{})
-		                       }
-		                       return nil
-		               }, statedb.Observable(params.DB, params.NeighborTable)),
-		      )
-	*/
 
 	return peerAddress, nil
 }
@@ -287,19 +275,11 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 		if n.PeerASN == nil {
 			return fmt.Errorf("peer %s does not have a PeerASN", n.Name)
 		}
+
 		if n.PeerAddress == nil {
-			fmt.Println("==========")
-			fmt.Println(*n.PeerConfigRef)
-			fmt.Println(n.PeerASN)
-			fmt.Println(n.AutoDiscovery)
-			fmt.Println(*n.AutoDiscovery)
-			fmt.Println(n.AutoDiscovery.DefaultGateway)
-			fmt.Println(n.AutoDiscovery.Mode)
-			fmt.Println("==========")
-			autoDiscovery := n.AutoDiscovery
-			switch autoDiscovery.Mode {
+			switch n.AutoDiscovery.Mode {
 			case "default-gateway":
-				defaultGateway, err := r.configureDefaultGateway(autoDiscovery.DefaultGateway)
+				defaultGateway, err := r.configureDefaultGateway(n.AutoDiscovery.DefaultGateway)
 				if err != nil {
 					r.logger.Error("failed to get default gateway", "error", err)
 				}

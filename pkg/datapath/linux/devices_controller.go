@@ -490,11 +490,12 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					continue
 				}
 				r := tables.Route{
-					Table:     tables.RouteTable(u.Table),
-					LinkIndex: index,
-					Scope:     uint8(u.Scope),
-					Dst:       ipnetToPrefix(u.Family, u.Dst),
-					Priority:  u.Priority,
+					Table:      tables.RouteTable(u.Table),
+					LinkIndex:  index,
+					Scope:      uint8(u.Scope),
+					Dst:        ipnetToPrefix(u.Family, u.Dst),
+					Priority:   u.Priority,
+					LinkStatus: getLinkStatus(u.Flags&unix.RTNH_F_LINKDOWN == 0),
 				}
 				r.Src, _ = netip.AddrFromSlice(u.Src)
 				r.Gw, _ = netip.AddrFromSlice(u.Gw)
@@ -789,6 +790,13 @@ func makeNetlinkFuncs() (*netlinkFuncs, error) {
 		RouteListFiltered: netlinkHandle.RouteListFiltered,
 		NeighList:         netlinkHandle.NeighList,
 	}, nil
+}
+
+func getLinkStatus(status bool) string {
+	if status {
+		return "up"
+	}
+	return "down"
 }
 
 func ipnetToPrefix(family int, ipn *net.IPNet) netip.Prefix {

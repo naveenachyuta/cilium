@@ -91,8 +91,9 @@ func (id RouteID) Key() index.Key {
 }
 
 type Route struct {
-	Table     RouteTable
-	LinkIndex int
+	Table      RouteTable
+	LinkIndex  int
+	LinkStatus string // "up" or "down"
 
 	Scope    uint8
 	Dst      netip.Prefix
@@ -107,8 +108,8 @@ func (r *Route) DeepCopy() *Route {
 }
 
 func (r *Route) String() string {
-	return fmt.Sprintf("Route{Dst: %s, Src: %s, Table: %d, LinkIndex: %d, Priority: %d}",
-		r.Dst, r.Src, r.Table, r.LinkIndex, r.Priority)
+	return fmt.Sprintf("Route{Dst: %s, Src: %s, Table: %d, LinkIndex: %d, Priority: %d, LinkStatus: %s}",
+		r.Dst, r.Src, r.Table, r.LinkIndex, r.Priority, r.LinkStatus)
 }
 
 func (*Route) TableHeader() []string {
@@ -120,6 +121,7 @@ func (*Route) TableHeader() []string {
 		"Table",
 		"Scope",
 		"Priority",
+		"LinkStatus",
 	}
 }
 
@@ -141,6 +143,7 @@ func (r *Route) TableRow() []string {
 		fmt.Sprintf("%d", r.Table),
 		fmt.Sprintf("%d", r.Scope),
 		fmt.Sprintf("%d", r.Priority),
+		r.LinkStatus,
 	}
 }
 

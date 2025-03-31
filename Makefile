@@ -56,33 +56,33 @@ TEST_UNITTEST_LDFLAGS=
 
 .PHONY: kind-bgpv2-service
 kind-bgpv2-service:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/service deploy
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service deploy
 
 .PHONY: kind-bgpv2-service-down
 kind-bgpv2-service-down:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/service destroy
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service destroy
 
 .PHONY: kind-bgpv2-service-apply-bgp
 kind-bgpv2-service-apply-bgp:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/service apply-bgp
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service apply-bgp
 
 .PHONY: kind-bgpv2-service-apply-policy
 kind-bgpv2-service-apply-service:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/service apply-service
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service apply-service
 
 
 
 .PHONY: kind-bgpv2-homing
 kind-bgpv2-homing:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/multi-homing deploy
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/multi-homing deploy
 
 .PHONY: kind-bgpv2-homing-down
 kind-bgpv2-homing-down:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/multi-homing destroy
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/multi-homing destroy
 
 .PHONY: kind-bgpv2-homing-apply-bgp
 kind-bgpv2-homing-apply-bgp:
-	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/multi-homing apply-bgp
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/multi-homing apply-bgp
 
 
 build: $(SUBDIRS) ## Builds all the components for Cilium by executing make in the respective sub directories.
