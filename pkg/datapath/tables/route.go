@@ -107,8 +107,8 @@ func (r *Route) DeepCopy() *Route {
 }
 
 func (r *Route) String() string {
-	return fmt.Sprintf("Route{Dst: %s, Src: %s, Table: %d, LinkIndex: %d}",
-		r.Dst, r.Src, r.Table, r.LinkIndex)
+	return fmt.Sprintf("Route{Dst: %s, Src: %s, Table: %d, LinkIndex: %d, Priority: %d}",
+		r.Dst, r.Src, r.Table, r.LinkIndex, r.Priority)
 }
 
 func (*Route) TableHeader() []string {

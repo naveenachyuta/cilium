@@ -30,7 +30,6 @@ import (
 // provided BGP server with the provided CiliumBGPVirtualRouter.
 type NeighborReconciler struct {
 	DB           *statedb.DB
-	JobGroup     job.Group
 	logger       *slog.Logger
 	SecretStore  store.BGPCPResourceStore[*slim_corev1.Secret]
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
@@ -52,42 +51,39 @@ type NeighborReconcilerIn struct {
 	PeerConfig   store.BGPCPResourceStore[*v2.CiliumBGPPeerConfig]
 	DaemonConfig *option.DaemonConfig
 
-	DB            *statedb.DB
-	JobGroup      job.Group
-	Signaler      *signaler.BGPCPSignaler
-	NeighborTable statedb.Table[*tables.Route]
+	DB         *statedb.DB
+	JobGroup   job.Group
+	Signaler   *signaler.BGPCPSignaler
+	RouteTable statedb.Table[*tables.Route]
 }
 
 func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
 	logger := params.Logger.With(types.ReconcilerLogField, "Neighbor")
 
-	/*
-
-			// Add observer for default gateway changes
-		    params.JobGroup.Add(
-		        job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
-		            route := event.Object
-
-		            // Check if this is a default route change
-		            if (route.Prefix == "0.0.0.0/0" || route.Prefix == "::/0") &&
-		               (event.Kind == statedb.ChangeKindAdd ||
-		                event.Kind == statedb.ChangeKindDelete ||
-		                event.Kind == statedb.ChangeKindUpdate) {
-
-		                // Trigger reconciliation when there's a change in default routes
-		                params.Signaler.Event(struct{}{})
-		                r.logger.Debug("Default gateway change detected, triggering BGP reconciliation")
-		            }
-		            return nil
-		        }, statedb.Observable(params.DB, tables.NewRouteTable())),
-		    )
-	*/
+	// Add observer for default gateway changes
+	params.JobGroup.Add(
+		job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
+			route := event.Object
+			a := event.Deleted
+			fmt.Println(route.Dst.String(), route.Priority, "llllllll")
+			fmt.Println("route", route, "assssssssffsdsdss", a)
+			b := event.Revision
+			fmt.Println("route", route, "assssssssffasfdsssdsdss", b)
+			// Check if this is a default route change
+			if route.Dst.String() == "0.0.0.0/0" || route.Dst.String() == "::/0" {
+				// Trigger reconciliation when there's a change in default routes
+				fmt.Println("signal triggereddd")
+				params.Signaler.Event(struct{}{})
+				params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
+			}
+			return nil
+		}, statedb.Observable(params.DB, params.RouteTable)),
+	)
 
 	return NeighborReconcilerOut{
 		Reconciler: &NeighborReconciler{
 			logger:       logger,
 			DB:           params.DB,
-			JobGroup:     params.JobGroup,
 			SecretStore:  params.SecretStore,
 			PeerConfig:   params.PeerConfig,
 			DaemonConfig: params.DaemonConfig,
@@ -228,6 +224,8 @@ func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, er
 		return defaultRoutes[i][6] < defaultRoutes[j][6]
 	})
 	fmt.Println(defaultRoutes, ";;;;;ssssssss")
+	fmt.Println(defaultRoutes[0])
+	fmt.Println(defaultRoutes[0][2])
 	return defaultRoutes[0][2], nil
 }
 
@@ -255,7 +253,7 @@ func (r *NeighborReconciler) configureDefaultGateway(defaultGateway *v2.DefaultG
 		      )
 	*/
 
-	return "", nil
+	return peerAddress, nil
 }
 
 func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) error {
@@ -306,9 +304,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 					r.logger.Error("failed to get default gateway", "error", err)
 				}
 				fmt.Println("fsdsds", defaultGateway, "lllll")
-				if defaultGateway != "" {
-					newNeigh[i].PeerAddress = &defaultGateway
-				}
+				newNeigh[i].PeerAddress = &defaultGateway
 			default:
 				r.logger.Debug("Peer does not have PeerAddress configured, skipping", types.PeerLogField, n.Name)
 				continue

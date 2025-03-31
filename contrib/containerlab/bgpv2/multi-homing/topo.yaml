@@ -31,7 +31,7 @@ topology:
           -c 'debug bgp neighbor-events'
           -c 'debug bgp updates'
           -c 'debug bgp zebra'
-          -c 'router bgp 65000'
+          -c 'router bgp 65010'
           -c '  bgp bestpath as-path multipath-relax'
           -c '  no bgp ebgp-requires-policy'
           -c '  bgp default ipv6-unicast'
@@ -39,8 +39,11 @@ topology:
           -c '  neighbor CILIUM peer-group'
           -c '  neighbor CILIUM remote-as external'
           -c '  neighbor CILIUM password cilium123'
+          -c '  neighbor CILIUM local-as 65000 no-prepend replace-as'
           -c '  bgp listen range 10.0.1.0/24 peer-group CILIUM'
           -c '  bgp listen range 10.0.2.0/24 peer-group CILIUM'
+          -c '  bgp listen range fd00:10:0:1::/64 peer-group CILIUM'
+          -c '  bgp listen range fd00:10:0:2::/64 peer-group CILIUM'
           -c '!'
     router1:
       kind: linux
@@ -79,9 +82,19 @@ topology:
           -c '  neighbor CILIUM peer-group'
           -c '  neighbor CILIUM remote-as external'
           -c '  neighbor CILIUM password cilium123'
+          -c '  neighbor CILIUM local-as 65000 no-prepend replace-as'
           -c '  bgp listen range 10.11.1.0/24 peer-group CILIUM'
           -c '  bgp listen range 10.11.2.0/24 peer-group CILIUM'
+          -c '  bgp listen range fd00:11:0:1::/64 peer-group CILIUM'
+          -c '  bgp listen range fd00:11:0:2::/64 peer-group CILIUM'
           -c '!'
+          
+    # route-map SET_METRIC permit 10
+#  set metric 100
+
+# router bgp 65100
+#  bgp router-id 10.1.1.1
+#  neighbor 192.0.2.1 route-map SET_METRIC in
     # Server with Cilium. It shares netns with kind node.
     server0:
       kind: linux
@@ -99,8 +112,10 @@ topology:
         - ip route append fd00::/16 via fd00:11:0:1::1 dev net1
         - ip route add fd00:10:0:0::1/128 via fd00:10:0:1::1 dev net0
         - ip route add fd00:11:0:0::1/128 via fd00:11:0:1::1 dev net1
-        - ip route replace default via 10.0.1.1 dev net0
-        - ip route replace default via 10.11.1.1 dev net1 metric 200
+        - ip route replace default via 10.0.1.1 dev net0 metric 200
+        - ip route replace default via 10.11.1.1 dev net1
+        - ip route replace default via fd00:10:0:1::1 dev net0 metric 200
+        - ip route replace default via fd00:11:0:1::1 dev net1
         # - ip link delete eth0
     # Server with Cilium. It shares netns with kind node.
     server1:
@@ -119,8 +134,10 @@ topology:
         - ip route append fd00::/16 via fd00:11:0:2::1 dev net1
         - ip route add fd00:10:0:0::1/128 via fd00:10:0:2::1 dev net0
         - ip route add fd00:11:0:0::1/128 via fd00:11:0:2::1 dev net1
-        - ip route replace default via 10.0.2.1 dev net0
-        - ip route replace default via 10.11.2.1 dev net1 metric 200
+        - ip route replace default via 10.0.2.1 dev net0 metric 200
+        - ip route replace default via 10.11.2.1 dev net1
+        - ip route replace default via fd00:10:0:2::1 dev net0 metric 200
+        - ip route replace default via fd00:11:0:2::1 dev net1
     # Server without Cilium. Useful for testing connectivity.
     server2:
       kind: linux
@@ -137,6 +154,8 @@ topology:
         - ip route append fd00::/16 via fd00:11:0:3::1 dev net1
         - ip route add default via 10.0.3.1 dev net0 metric 100
         - ip route add default via 10.11.3.1 dev net1 metric 200
+        - ip route replace default via fd00:10:0:3::1/64 dev net0 metric 200
+        - ip route replace default via fd00:11:0:3::1/64 dev net1
   links:
     - endpoints: ["router0:net0", "server0:net0"]
     - endpoints: ["router0:net1", "server1:net0"]
@@ -144,3 +163,16 @@ topology:
     - endpoints: ["router1:net0", "server0:net1"]
     - endpoints: ["router1:net1", "server1:net1"]
     - endpoints: ["router1:net2", "server2:net1"]
+
+
+# # Backup the current config to a file
+# docker exec $ROUTER_NAME vtysh -c "show running-config" > frr_backup.conf
+
+# # Stop FRR
+# docker exec $ROUTER_NAME /usr/lib/frr/frrinit.sh stop
+
+# # Start FRR
+# docker exec $ROUTER_NAME /usr/lib/frr/frrinit.sh start
+
+# # Restore the configuration
+# cat frr_backup.conf | docker exec -i $ROUTER_NAME vtysh -c "config terminal" -c "$(cat -)"
