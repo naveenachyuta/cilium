@@ -417,7 +417,6 @@ func (in *CiliumBGPNeighbor) DeepEqual(other *CiliumBGPNeighbor) bool {
 	if in.PeerASN != other.PeerASN {
 		return false
 	}
-
 	if (in.AuthSecretRef == nil) != (other.AuthSecretRef == nil) {
 		return false
 	} else if in.AuthSecretRef != nil {
