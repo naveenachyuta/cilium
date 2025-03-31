@@ -133,14 +133,6 @@ type CiliumBGPPeer struct {
 	PeerConfigRef *PeerConfigReference `json:"peerConfigRef,omitempty"`
 }
 
-// DefaultGateway is the configuration for auto-discovery of the default gateway.
-type DefaultGateway struct {
-	// addressFamily is the address family of the default gateway.
-	//
-	// +kubebuilder:validation:Enum=ipv4;ipv6
-	AddressFamily string `json:"addressFamily"`
-}
-
 // PeerConfigReference is a reference to a peer configuration resource.
 type PeerConfigReference struct {
 	// Group is the group of the peer config resource.
