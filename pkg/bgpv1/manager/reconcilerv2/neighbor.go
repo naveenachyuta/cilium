@@ -55,7 +55,7 @@ type NeighborReconcilerIn struct {
 	DB         *statedb.DB
 	JobGroup   job.Group
 	Signaler   *signaler.BGPCPSignaler
-	RouteTable statedb.Table[*tables.Route]
+	RouteTable statedb.Table[*tables.Device]
 }
 
 func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
@@ -63,20 +63,30 @@ func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
 
 	// Add observer for default gateway changes
 	params.JobGroup.Add(
-		job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
-			route := event.Object
-			a := event.Deleted
-			fmt.Println(route.Dst.String(), route.Priority, "llllllll")
-			fmt.Println("route", route, "assssssssffsdsdss", a)
-			b := event.Revision
-			fmt.Println("route", route, "assssssssffasfdsssdsdss", b)
-			// Check if this is a default route change
-			if route.Dst.String() == "0.0.0.0/0" || route.Dst.String() == "::/0" {
-				// Trigger reconciliation when there's a change in default routes
-				fmt.Println("signal triggereddd")
-				params.Signaler.Event(struct{}{})
-				params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
-			}
+		job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Device]) error {
+			device := event.Object
+			fmt.Println("asdfdfdd", device.Name, device.Addrs, device.Index, device.OperStatus, device.RawFlags, device.Type, device)
+
+			// columns := []string{"Destination", "Source", "Gateway", "LinkIndex", "Priority"}
+			// idxs, err := getColumnIndexes(columns, header)
+			// if err != nil {
+			// 	return "", err
+			// }
+			// route := event.Object
+			// a := event.Deleted
+			// fmt.Println(route.Dst.String(), route.Priority, "llllllll")
+			// fmt.Println("route", route, "assssssssffsdsdss", a)
+			// b := event.Revision
+			// fmt.Println("route", route, "assssssssffasfdsssdsdss", b)
+			// // Check if this is a default route change
+			// if route.Dst.String() == "0.0.0.0/0" || route.Dst.String() == "::/0" {
+			// 	// Trigger reconciliation when there's a change in default routes
+			// 	fmt.Println("signal triggereddd")
+			// 	params.Signaler.Event(struct{}{})
+			// 	params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
+			// }
+			params.Signaler.Event(struct{}{})
+			params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
 			return nil
 		}, statedb.Observable(params.DB, params.RouteTable)),
 	)
@@ -172,6 +182,23 @@ func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, er
 	meta := r.DB.GetTable(txn, "routes")
 	tbl := statedb.AnyTable{Meta: meta}
 	objs := tbl.All(txn)
+
+	deviceMeta := r.DB.GetTable(txn, "devices")
+	deviceTbl := statedb.AnyTable{Meta: deviceMeta}
+	deviceObjs := deviceTbl.All(txn)
+	deviceHeader := deviceTbl.TableHeader()
+	for _, head := range deviceHeader {
+		fmt.Println("header123", head)
+	}
+	deviceColumns := []string{"Index", "OperStatus"}
+	deviceIdxs, err := getColumnIndexes(deviceColumns, deviceHeader)
+	if err != nil {
+		return "", fmt.Errorf("failed to get column indexes for device table: %w", err)
+	}
+	for deviceObj := range deviceObjs {
+		row := deviceObj.(statedb.TableWritable).TableRow()
+		fmt.Println("devicessss", row)
+	}
 	// for obj := range objs {
 	// 	fmt.Println("object", obj)
 	// 	header := tbl.TableHeader()
@@ -195,7 +222,7 @@ func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, er
 	// }
 	header := tbl.TableHeader()
 	defaultRoutes := [][]string{}
-	columns := []string{"Destination", "Source", "Gateway", "Priority", "LinkStatus"}
+	columns := []string{"Destination", "Source", "Gateway", "LinkIndex", "Priority"}
 	idxs, err := getColumnIndexes(columns, header)
 	if err != nil {
 		return "", err
@@ -203,15 +230,42 @@ func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, er
 	//if rt.Flags&unix.RTNH_F_LINKDOWN != 0 || rt.Flags&unix.RTNH_F_DEAD != 0 {
 	// continue
 	// }
+	for _, h1 := range header {
+		fmt.Println(h1, "route header")
+	}
 	for obj := range objs {
 		// row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
 		row := obj.(statedb.TableWritable).TableRow()
 		fmt.Println("rorrrwwwwww", row)
-		if row[idxs["Destination"]] != "" {
-			if row[idxs["Destination"]] == "0.0.0.0/0" && addressFamily == "ipv4" && row[idxs["LinkStatus"]] == "up" {
-				defaultRoutes = append(defaultRoutes, row)
-			} else if row[idxs["Destination"]] == "::/0" && addressFamily == "ipv6" && row[idxs["LinkStatus"]] == "up" {
-				defaultRoutes = append(defaultRoutes, row)
+		if row[idxs["Gateway"]] != "" && row[idxs["Destination"]] != "" {
+			if row[idxs["Destination"]] == "0.0.0.0/0" && addressFamily == "ipv4" {
+				for deviceObj := range deviceObjs {
+					row2 := deviceObj.(statedb.TableWritable).TableRow()
+					fmt.Println("row22222", row2, deviceIdxs["OperStatus"], row2[deviceIdxs["Index"]], row[idxs["LinkIndex"]])
+					if row2[deviceIdxs["Index"]] == row[idxs["LinkIndex"]] {
+						fmt.Println("yesssfffaaaaaa")
+						if row2[deviceIdxs["OperStatus"]] == "up" {
+							fmt.Println("yesssfbbbbbbbbbbbbfadfgdfgmfdnldfnf")
+							r.logger.Debug("Default gateway found1111", "gateway", row[idxs["Gateway"]])
+							defaultRoutes = append(defaultRoutes, row)
+							break
+						}
+					}
+				}
+			} else if row[idxs["Destination"]] == "::/0" && addressFamily == "ipv6" {
+				for deviceObj := range deviceObjs {
+					row2 := deviceObj.(statedb.TableWritable).TableRow()
+					fmt.Println("row233333", row2, deviceIdxs["OperStatus"], row2[deviceIdxs["Index"]], row[idxs["LinkIndex"]])
+					if row2[deviceIdxs["Index"]] == row[idxs["LinkIndex"]] {
+						fmt.Println("yesssfff")
+						if row2[deviceIdxs["OperStatus"]] == "up" {
+							fmt.Println("yesssfbbbbbbbbbbbbff")
+							r.logger.Debug("Default gateway found2222", "gateway", row[idxs["Gateway"]])
+							defaultRoutes = append(defaultRoutes, row)
+							break
+						}
+					}
+				}
 			}
 		}
 	}
@@ -344,6 +398,13 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 	}
 
 	for _, m := range nset {
+		if m.new != nil {
+			fmt.Println(*m.new.Peer.PeerAddress, "new")
+		}
+		if m.cur != nil {
+			fmt.Println(*m.cur.Peer.PeerAddress, "current")
+		}
+		fmt.Printf("%v whattt", m)
 		// present in new neighbors (set new) but not in current neighbors (set cur)
 		if m.new != nil && m.cur == nil {
 			toCreate = append(toCreate, m.new)
@@ -368,7 +429,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// remove neighbors
 	for _, n := range toRemove {
-		l.Info("Removing peer", types.PeerLogField, n.Peer.Name)
+		l.Info("Removing peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
 
 		if err := p.BGPInstance.Router.RemoveNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, "")); err != nil {
 			return fmt.Errorf("failed to remove neigbhor %s from instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)
@@ -379,7 +440,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// update neighbors
 	for _, n := range toUpdate {
-		l.Info("Updating peer", types.PeerLogField, n.Peer.Name)
+		l.Info("Updating peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
 
 		if err := p.BGPInstance.Router.UpdateNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, n.Password)); err != nil {
 			return fmt.Errorf("failed to update neigbhor %s in instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)
@@ -390,7 +451,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// create new neighbors
 	for _, n := range toCreate {
-		l.Info("Adding peer", types.PeerLogField, n.Peer.Name)
+		l.Info("Adding peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
 
 		if err := p.BGPInstance.Router.AddNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, n.Password)); err != nil {
 			return fmt.Errorf("failed to add neigbhor %s in instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)

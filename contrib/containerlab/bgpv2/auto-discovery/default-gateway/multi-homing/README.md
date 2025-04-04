@@ -1,5 +1,5 @@
-Multi-homing BGP
-================
+Multi-homing BGP with Default Gateway Auto Discovery
+====================================================
 
 Multi-homing BGP means Cilium node is peering with two upstream routers over different links.
 
@@ -13,7 +13,8 @@ BGP Resources
 
 **BGP instance configuration**
 
-In the below example, we define two eBGP peers - fd00:10:0:1::1 and fd00:11:0:1::1, both of which have identical peering configuration defined in
+In the below example, we define two eBGP peers without peer address. Peer address will be auto discovered using default gateway
+for each address family. It will create bgp session per peer configured so each address family will have one bgp session  , both of which have identical peering configuration defined in
 CiliumBGPPeerConfig resource with name `cilium-peer`.
 
 ```yaml
@@ -21,14 +22,20 @@ CiliumBGPPeerConfig resource with name `cilium-peer`.
   - name: "65001"
     localASN: 65001
     peers:
-    - name: "65000"
+    - name: "65000 ipv4"
       peerASN: 65000
-      peerAddress: fd00:10::1
+      autoDiscovery:
+        mode: "default-gateway"
+        defaultGateway:
+          addressFamily: ipv4
       peerConfigRef:
         name: "cilium-peer"
-    - name: "65011"
-      peerASN: 65011
-      peerAddress: fd00:11::1
+    - name: "65000 ipv6"
+      peerASN: 65000
+      autoDiscovery:
+        mode: "default-gateway"
+        defaultGateway:
+          addressFamily: ipv6
       peerConfigRef:
         name: "cilium-peer"
 ```

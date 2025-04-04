@@ -13,7 +13,6 @@ spec:
     peers:
     - name: "65000 ipv4"
       peerASN: 65000
-      # peerAddress: fd00:10::1
       autoDiscovery:
         mode: "default-gateway"
         defaultGateway:
@@ -22,7 +21,6 @@ spec:
         name: "cilium-peer"
     - name: "65000 ipv6"
       peerASN: 65000
-      # peerAddress: fd00:10::1
       autoDiscovery:
         mode: "default-gateway"
         defaultGateway:

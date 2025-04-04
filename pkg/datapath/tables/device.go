@@ -88,18 +88,18 @@ func (a *HardwareAddr) UnmarshalJSON(bs []byte) error {
 //
 // +deepequal-gen=true
 type Device struct {
-	Index        int             // positive integer that starts at one, zero is never used
-	MTU          int             // maximum transmission unit
-	Name         string          // e.g., "en0", "lo0", "eth0.100"
-	HardwareAddr HardwareAddr    // IEEE MAC-48, EUI-48 and EUI-64 form
-	Flags        net.Flags       // e.g. net.FlagUp, net.eFlagLoopback, net.FlagMulticast
-	Addrs        []DeviceAddress // Addresses assigned to the device
-	RawFlags     uint32          // Raw interface flags
-	Type         string          // Device type, e.g. "veth" etc.
-	MasterIndex  int             // Index of the master device (e.g. bridge or bonding device)
-
-	Selected          bool   // True if this is an external facing device
-	NotSelectedReason string // Reason why this device was not selected
+	Index             int             // positive integer that starts at one, zero is never used
+	MTU               int             // maximum transmission unit
+	Name              string          // e.g., "en0", "lo0", "eth0.100"
+	HardwareAddr      HardwareAddr    // IEEE MAC-48, EUI-48 and EUI-64 form
+	Flags             net.Flags       // e.g. net.FlagUp, net.eFlagLoopback, net.FlagMulticast
+	Addrs             []DeviceAddress // Addresses assigned to the device
+	RawFlags          uint32          // Raw interface flags
+	Type              string          // Device type, e.g. "veth" etc.
+	MasterIndex       int             // Index of the master device (e.g. bridge or bonding device)
+	OperStatus        string          // Operational status, e.g. "up", "lower-layer-down"
+	Selected          bool            // True if this is an external facing device
+	NotSelectedReason string          // Reason why this device was not selected
 }
 
 func (d *Device) DeepCopy() *Device {
@@ -127,6 +127,7 @@ func (*Device) TableHeader() []string {
 		"HWAddr",
 		"Flags",
 		"Addresses",
+		"OperStatus",
 	}
 }
 
@@ -144,6 +145,7 @@ func (d *Device) TableRow() []string {
 		d.HardwareAddr.String(),
 		d.Flags.String(),
 		strings.Join(addrs, ", "),
+		d.OperStatus,
 	}
 }
 
