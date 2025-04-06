@@ -25,5 +25,5 @@ operator:
 
 hostNetwork: true
 
-# Ensure Cilium can access the host's network devices
-devices: "*"
+# # Ensure Cilium can access the host's network devices
+# devices: "*"

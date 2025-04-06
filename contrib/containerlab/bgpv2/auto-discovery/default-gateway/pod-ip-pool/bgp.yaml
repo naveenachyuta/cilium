@@ -1,14 +1,34 @@
-apiVersion: v1
-kind: Namespace
+apiVersion: cilium.io/v2
+kind: CiliumPodIPPool
 metadata:
-  name: tenant-blue
-
+  name: default
+  labels:
+    pool: blue
+spec:
+  ipv4:
+    cidrs:
+      - 10.100.0.0/16
+    maskSize: 24
+  ipv6:
+    cidrs:
+      - fd00:100:1::/48
+    maskSize: 64
 ---
-apiVersion: v1
-kind: Namespace
+apiVersion: cilium.io/v2
+kind: CiliumPodIPPool
 metadata:
-  name: tenant-red
-
+  name: red-pool
+  labels:
+    pool: red
+spec:
+  ipv4:
+    cidrs:
+      - 10.200.0.0/16
+    maskSize: 24
+  ipv6:
+    cidrs:
+      - fd00:200:1::/48
+    maskSize: 64
 ---
 apiVersion: cilium.io/v2
 kind: CiliumBGPClusterConfig
@@ -38,6 +58,7 @@ spec:
           addressFamily: ipv6
       peerConfigRef:
         name: "cilium-peer"
+
 ---
 apiVersion: cilium.io/v2
 kind: CiliumBGPPeerConfig
@@ -53,47 +74,53 @@ spec:
       safi: unicast
       advertisements:
         matchLabels:
-          advertise: "bgp"
+          advertise: "pod-ip-pool"
     - afi: ipv6
       safi: unicast
       advertisements:
         matchLabels:
-          advertise: "bgp"
+          advertise: "pod-ip-pool"
 
 ---
 apiVersion: cilium.io/v2
 kind: CiliumBGPAdvertisement
 metadata:
-  name: bgp-advertisements
+  name: pod-ip-pool-advert
   labels:
-    advertise: bgp
+    advertise: pod-ip-pool
 spec:
   advertisements:
-    - advertisementType: "PodCIDR"
-      attributes:
-        communities:
-          standard: [ "65000:99" ]
-    - advertisementType: "Service"
-      service:
-        addresses:
-          - ClusterIP
-          - ExternalIP
-          - LoadBalancerIP
+    - advertisementType: "CiliumPodIPPool"
       selector:
-        matchExpressions:
-          - { key: bgp, operator: In, values: [ blue ] }
+        matchLabels:
+          pool: "blue"
       attributes:
         communities:
           standard: [ "65000:100" ]
-    - advertisementType: "Service"
-      service:
-        addresses:
-          - ClusterIP
-          - ExternalIP
-          - LoadBalancerIP
+    - advertisementType: "CiliumPodIPPool"
       selector:
-        matchExpressions:
-          - { key: bgp, operator: In, values: [ red ] }
+        matchLabels:
+          pool: "red"
       attributes:
         communities:
           standard: [ "65000:200" ]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: curl-red
+spec:
+  selector:
+    matchLabels:
+      app: curl-red
+  template:
+    metadata:
+      labels:
+        app: curl-red
+      annotations:
+        "ipam.cilium.io/ip-pool": "red-pool"
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl
+          command: ["sleep", "infinit"]

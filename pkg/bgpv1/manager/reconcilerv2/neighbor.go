@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"net/netip"
 	"sort"
@@ -55,38 +56,24 @@ type NeighborReconcilerIn struct {
 	DB         *statedb.DB
 	JobGroup   job.Group
 	Signaler   *signaler.BGPCPSignaler
-	RouteTable statedb.Table[*tables.Device]
+	RouteTable statedb.Table[*tables.Route]
 }
 
 func NewNeighborReconciler(params NeighborReconcilerIn) NeighborReconcilerOut {
 	logger := params.Logger.With(types.ReconcilerLogField, "Neighbor")
 
-	// Add observer for default gateway changes
+	// add observer for default gateway changes
 	params.JobGroup.Add(
-		job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Device]) error {
-			device := event.Object
-			fmt.Println("asdfdfdd", device.Name, device.Addrs, device.Index, device.OperStatus, device.RawFlags, device.Type, device)
-
-			// columns := []string{"Destination", "Source", "Gateway", "LinkIndex", "Priority"}
-			// idxs, err := getColumnIndexes(columns, header)
-			// if err != nil {
-			// 	return "", err
-			// }
-			// route := event.Object
-			// a := event.Deleted
-			// fmt.Println(route.Dst.String(), route.Priority, "llllllll")
-			// fmt.Println("route", route, "assssssssffsdsdss", a)
-			// b := event.Revision
-			// fmt.Println("route", route, "assssssssffasfdsssdsdss", b)
-			// // Check if this is a default route change
-			// if route.Dst.String() == "0.0.0.0/0" || route.Dst.String() == "::/0" {
-			// 	// Trigger reconciliation when there's a change in default routes
-			// 	fmt.Println("signal triggereddd")
-			// 	params.Signaler.Event(struct{}{})
-			// 	params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
-			// }
-			params.Signaler.Event(struct{}{})
-			params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
+		job.Observer("default-gateway-tracker", func(ctx context.Context, event statedb.Change[*tables.Route]) error {
+			route := event.Object
+			fmt.Println("route111", route.Dst, route.Gw, route.LinkIndex, route.Priority)
+			// check for default route change
+			if route.Dst.String() == netip.PrefixFrom(netip.IPv4Unspecified(), 0).String() ||
+				route.Dst.String() == netip.PrefixFrom(netip.IPv6Unspecified(), 0).String() {
+				// trigger reconciliation for default route changes
+				params.Signaler.Event(struct{}{})
+				params.Logger.Debug("Default gateway change detected, triggering BGP reconciliation")
+			}
 			return nil
 		}, statedb.Observable(params.DB, params.RouteTable)),
 	)
@@ -160,142 +147,96 @@ func (r *NeighborReconciler) Cleanup(i *instance.BGPInstance) {
 	}
 }
 
-func getColumnIndexes(names []string, header []string) (map[string]int, error) {
-	columnIndexes := make(map[string]int)
-loop:
-	for _, name := range names {
-		for i, name2 := range header {
-			if strings.EqualFold(name, name2) {
-				columnIndexes[name] = i
-				continue loop
-			}
-		}
-		return nil, fmt.Errorf("column %q not part of %v", name, header)
+func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway) (string, error) {
+	var defaultRoute string
+	switch defaultGateway.AddressFamily {
+	case "ipv4":
+		defaultRoute = netip.PrefixFrom(netip.IPv4Unspecified(), 0).String()
+	case "ipv6":
+		defaultRoute = netip.PrefixFrom(netip.IPv6Unspecified(), 0).String()
+	default:
+		return "", fmt.Errorf("invalid address family %s", defaultGateway.AddressFamily)
 	}
-	return columnIndexes, nil
-}
-
-func (r *NeighborReconciler) getDefaultGateway(addressFamily string) (string, error) {
-	// addressFamily = netlink.FAMILY_V4
-	fmt.Println(addressFamily)
 	txn := r.DB.ReadTxn()
-	meta := r.DB.GetTable(txn, "routes")
-	tbl := statedb.AnyTable{Meta: meta}
-	objs := tbl.All(txn)
+	routeMeta := r.DB.GetTable(txn, "routes")
+	routeTbl := statedb.AnyTable{Meta: routeMeta}
+	routeObjs := routeTbl.All(txn)
+	header := routeTbl.TableHeader()
+	// extract indexes of required columns
+	routeColumns := []string{"Destination", "Source", "Gateway", "LinkIndex", "Priority"}
+	routeIdxs, err := getColumnIndexes(routeColumns, header)
+	if err != nil {
+		return "", fmt.Errorf("failed to get column indexes for route table: %w", err)
+	}
 
 	deviceMeta := r.DB.GetTable(txn, "devices")
 	deviceTbl := statedb.AnyTable{Meta: deviceMeta}
 	deviceObjs := deviceTbl.All(txn)
 	deviceHeader := deviceTbl.TableHeader()
-	for _, head := range deviceHeader {
-		fmt.Println("header123", head)
-	}
+	// extract indexes of required columns
 	deviceColumns := []string{"Index", "OperStatus"}
 	deviceIdxs, err := getColumnIndexes(deviceColumns, deviceHeader)
 	if err != nil {
 		return "", fmt.Errorf("failed to get column indexes for device table: %w", err)
 	}
-	for deviceObj := range deviceObjs {
-		row := deviceObj.(statedb.TableWritable).TableRow()
-		fmt.Println("devicessss", row)
-	}
-	// for obj := range objs {
-	// 	fmt.Println("object", obj)
-	// 	header := tbl.TableHeader()
 
-	// 	var idxs []int
-	// 	var err error
-
-	// idxs, err = getColumnIndexes(header, header)
-
-	// fmt.Println("idxsss", idxs, err)
-
-	// fmt.Println("header123", header)
-	// }
-
-	// allTbls := r.DB.GetTables(txn)
-	// fmt.Println(allTbls, "llsdlfldsflsd")
-	// for _, tbls := range allTbls {
-	// 	fmt.Println("llklklklklklkkl")
-	// 	fmt.Println(tbls.Name())
-	// 	fmt.Println(tbls.Indexes())
-	// }
-	header := tbl.TableHeader()
 	defaultRoutes := [][]string{}
-	columns := []string{"Destination", "Source", "Gateway", "LinkIndex", "Priority"}
-	idxs, err := getColumnIndexes(columns, header)
-	if err != nil {
-		return "", err
-	}
-	//if rt.Flags&unix.RTNH_F_LINKDOWN != 0 || rt.Flags&unix.RTNH_F_DEAD != 0 {
-	// continue
-	// }
-	for _, h1 := range header {
-		fmt.Println(h1, "route header")
-	}
-	for obj := range objs {
-		// row := takeColumns(obj.(statedb.TableWritable).TableRow(), idxs)
-		row := obj.(statedb.TableWritable).TableRow()
-		fmt.Println("rorrrwwwwww", row)
-		if row[idxs["Gateway"]] != "" && row[idxs["Destination"]] != "" {
-			if row[idxs["Destination"]] == "0.0.0.0/0" && addressFamily == "ipv4" {
-				for deviceObj := range deviceObjs {
-					row2 := deviceObj.(statedb.TableWritable).TableRow()
-					fmt.Println("row22222", row2, deviceIdxs["OperStatus"], row2[deviceIdxs["Index"]], row[idxs["LinkIndex"]])
-					if row2[deviceIdxs["Index"]] == row[idxs["LinkIndex"]] {
-						fmt.Println("yesssfffaaaaaa")
-						if row2[deviceIdxs["OperStatus"]] == "up" {
-							fmt.Println("yesssfbbbbbbbbbbbbfadfgdfgmfdnldfnf")
-							r.logger.Debug("Default gateway found1111", "gateway", row[idxs["Gateway"]])
-							defaultRoutes = append(defaultRoutes, row)
-							break
-						}
-					}
-				}
-			} else if row[idxs["Destination"]] == "::/0" && addressFamily == "ipv6" {
-				for deviceObj := range deviceObjs {
-					row2 := deviceObj.(statedb.TableWritable).TableRow()
-					fmt.Println("row233333", row2, deviceIdxs["OperStatus"], row2[deviceIdxs["Index"]], row[idxs["LinkIndex"]])
-					if row2[deviceIdxs["Index"]] == row[idxs["LinkIndex"]] {
-						fmt.Println("yesssfff")
-						if row2[deviceIdxs["OperStatus"]] == "up" {
-							fmt.Println("yesssfbbbbbbbbbbbbff")
-							r.logger.Debug("Default gateway found2222", "gateway", row[idxs["Gateway"]])
-							defaultRoutes = append(defaultRoutes, row)
-							break
-						}
-					}
-				}
-			}
+	for routeObj := range routeObjs {
+		ro := routeObj.(statedb.TableWritable).TableRow()
+		if ro[routeIdxs["Gateway"]] == "" && ro[routeIdxs["Destination"]] == "" {
+			continue
 		}
-	}
-	// netip.PrefixFrom(netip.IPv4Unspecified(), 0)
+		if ro[routeIdxs["Destination"]] == defaultRoute {
+			matched := validDefaultRoute(ro, routeIdxs, deviceObjs, deviceIdxs)
+			if !matched {
+				continue
+			}
+			r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
+			defaultRoutes = append(defaultRoutes, ro)
+		}
+		// if ro[routeIdxs["Destination"]] == netip.PrefixFrom(netip.IPv4Unspecified(), 0).String() && addressFamily == "ipv4" {
+		// 	matched := validDefaultRoute(ro, routeIdxs, deviceObjs, deviceIdxs)
+		// 	if !matched {
+		// 		continue
+		// 	}
+		// 	r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
+		// 	defaultRoutes = append(defaultRoutes, ro)
 
-	fmt.Println(defaultRoutes, ";;;;;")
+		// } else if ro[routeIdxs["Destination"]] == netip.PrefixFrom(netip.IPv6Unspecified(), 0).String() && addressFamily == "ipv6" {
+		// 	matched := validDefaultRoute(ro, routeIdxs, deviceObjs, deviceIdxs)
+		// 	if !matched {
+		// 		continue
+		// 	}
+		// 	r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
+		// 	defaultRoutes = append(defaultRoutes, ro)
+		// for deviceObj := range deviceObjs {
+		// 	row2 := deviceObj.(statedb.TableWritable).TableRow()
+		// 	if row2[deviceIdxs["Index"]] == ro[idxs["LinkIndex"]] {
+		// 		if row2[deviceIdxs["OperStatus"]] == "up" {
+		// 			r.logger.Debug("Default gateway found2222", "gateway", ro[idxs["Gateway"]])
+		// 			defaultRoutes = append(defaultRoutes, ro)
+		// 			break
+		// 		}
+		// 	}
+		// }
+		// }
+	}
 	if len(defaultRoutes) == 0 {
 		return "", fmt.Errorf("failed to get default gateways from route table")
 	}
 	// sort the default routes by priority
 	sort.Slice(defaultRoutes, func(i, j int) bool {
-		return defaultRoutes[i][idxs["Priority"]] < defaultRoutes[j][idxs["Priority"]]
+		iPriority := defaultRoutes[i][routeIdxs["Priority"]]
+		jPriority := defaultRoutes[j][routeIdxs["Priority"]]
+		// compare length of strings
+		if len(iPriority) != len(jPriority) {
+			return len(iPriority) < len(jPriority)
+		}
+		// if length of strings is same, compare lexicographically
+		return iPriority < jPriority
 	})
-	fmt.Println(defaultRoutes, ";;;;;ssssssss")
-	fmt.Println(defaultRoutes[0])
-	fmt.Println(defaultRoutes[0][idxs["Gateway"]])
 	// return the gateway address with lowest priority
-	return defaultRoutes[0][idxs["Gateway"]], nil
-}
-
-func (r *NeighborReconciler) configureDefaultGateway(defaultGateway *v2.DefaultGateway) (string, error) {
-	peerAddress, err := r.getDefaultGateway(defaultGateway.AddressFamily)
-	if err != nil {
-		return "", fmt.Errorf("failed to get default gateway %w", err)
-	}
-	if peerAddress == "" {
-		return peerAddress, fmt.Errorf("failed get default gateway. empty address")
-	}
-
-	return peerAddress, nil
+	return defaultRoutes[0][routeIdxs["Gateway"]], nil
 }
 
 func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) error {
@@ -333,18 +274,17 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 		if n.PeerAddress == nil {
 			switch n.AutoDiscovery.Mode {
 			case "default-gateway":
-				defaultGateway, err := r.configureDefaultGateway(n.AutoDiscovery.DefaultGateway)
+				defaultGateway, err := r.getDefaultGateway(n.AutoDiscovery.DefaultGateway)
 				if err != nil {
 					r.logger.Error("failed to get default gateway", "error", err)
+					continue
 				}
-				fmt.Println("fsdsds", defaultGateway, "lllll")
 				newNeigh[i].PeerAddress = &defaultGateway
 			default:
 				r.logger.Debug("Peer does not have PeerAddress configured, skipping", types.PeerLogField, n.Name)
 				continue
 			}
 		}
-		fmt.Println(newNeigh[i], "lklskdls")
 		var (
 			key = r.neighborID(&newNeigh[i])
 			h   *member
@@ -398,13 +338,6 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 	}
 
 	for _, m := range nset {
-		if m.new != nil {
-			fmt.Println(*m.new.Peer.PeerAddress, "new")
-		}
-		if m.cur != nil {
-			fmt.Println(*m.cur.Peer.PeerAddress, "current")
-		}
-		fmt.Printf("%v whattt", m)
 		// present in new neighbors (set new) but not in current neighbors (set cur)
 		if m.new != nil && m.cur == nil {
 			toCreate = append(toCreate, m.new)
@@ -429,7 +362,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// remove neighbors
 	for _, n := range toRemove {
-		l.Info("Removing peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
+		l.Info("Removing peer", types.PeerLogField, n.Peer.Name)
 
 		if err := p.BGPInstance.Router.RemoveNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, "")); err != nil {
 			return fmt.Errorf("failed to remove neigbhor %s from instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)
@@ -440,7 +373,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// update neighbors
 	for _, n := range toUpdate {
-		l.Info("Updating peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
+		l.Info("Updating peer", types.PeerLogField, n.Peer.Name)
 
 		if err := p.BGPInstance.Router.UpdateNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, n.Password)); err != nil {
 			return fmt.Errorf("failed to update neigbhor %s in instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)
@@ -451,7 +384,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 
 	// create new neighbors
 	for _, n := range toCreate {
-		l.Info("Adding peer", types.PeerLogField, n.Peer.Name, *n.Peer.PeerAddress, *n.Peer.PeerASN)
+		l.Info("Adding peer", types.PeerLogField, n.Peer.Name)
 
 		if err := p.BGPInstance.Router.AddNeighbor(ctx, types.ToNeighborV2(n.Peer, n.Config, n.Password)); err != nil {
 			return fmt.Errorf("failed to add neigbhor %s in instance %s: %w", n.Peer.Name, p.DesiredConfig.Name, err)
@@ -558,4 +491,31 @@ func GetPeerAddressFromConfig(conf *v2.CiliumBGPNodeInstance, peerName string) (
 
 func (r *NeighborReconciler) neighborID(n *v2.CiliumBGPNodePeer) string {
 	return fmt.Sprintf("%s%s%d", n.Name, *n.PeerAddress, *n.PeerASN)
+}
+
+func getColumnIndexes(names []string, header []string) (map[string]int, error) {
+	columnIndexes := make(map[string]int)
+loop:
+	for _, name := range names {
+		for i, name2 := range header {
+			if strings.EqualFold(name, name2) {
+				columnIndexes[name] = i
+				continue loop
+			}
+		}
+		return nil, fmt.Errorf("column %q not part of %v", name, header)
+	}
+	return columnIndexes, nil
+}
+
+func validDefaultRoute(ro []string, routeIdxs map[string]int, deviceObjs iter.Seq2[any, statedb.Revision], deviceIdxs map[string]int) bool {
+	for deviceObj := range deviceObjs {
+		do := deviceObj.(statedb.TableWritable).TableRow()
+		if do[deviceIdxs["Index"]] == ro[routeIdxs["LinkIndex"]] {
+			if do[deviceIdxs["OperStatus"]] == "up" {
+				return true
+			}
+		}
+	}
+	return false
 }

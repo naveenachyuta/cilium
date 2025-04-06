@@ -1,4 +1,4 @@
-name: bgpv2-cplane-dev-homing
+name: bgpv2-cplane-dev-mh
 topology:
   nodes:
     # A simple BGP router that peers with Cilium with eBGP.
@@ -14,9 +14,6 @@ topology:
         - ip link add name loopback type dummy
         - ip link set dev loopback up
         - ip addr add fd00:10:0:0::1/128 dev loopback
-        - ip addr add fd00:10:0:1::1/64 dev net0
-        - ip addr add fd00:10:0:2::1/64 dev net1
-        - ip addr add fd00:10:0:3::1/64 dev net2
         - ip route add blackhole 10.0.0.0/8
         - ip route add blackhole fd00::/16
         # Boiler plate to make FRR work
@@ -25,12 +22,20 @@ topology:
         - chown frr:frr /var/log/frr.log
         - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
         - /usr/lib/frr/frrinit.sh start
+        # ipv6 addresses for net interfaces are configured in the router to persist across link/device failures
+        # 65000 will be replaced with 65010 when the routes are propogated further
         - >-
           vtysh -c 'conf t'
           -c 'log file /var/log/frr.log'
           -c 'debug bgp neighbor-events'
           -c 'debug bgp updates'
           -c 'debug bgp zebra'
+          -c 'interface net0'
+          -c 'ipv6 address fd00:10:0:1::1/64'
+          -c "interface net1"
+          -c 'ipv6 address fd00:10:0:2::1/64'
+          -c "interface net2"
+          -c 'ipv6 address fd00:10:0:3::1/64'
           -c 'router bgp 65010'
           -c '  bgp bestpath as-path multipath-relax'
           -c '  no bgp ebgp-requires-policy'
@@ -57,9 +62,6 @@ topology:
         - ip link add name loopback type dummy
         - ip link set dev loopback up
         - ip addr add fd00:11:0:0::1/128 dev loopback
-        - ip addr add fd00:11:0:1::1/64 dev net0
-        - ip addr add fd00:11:0:2::1/64 dev net1
-        - ip addr add fd00:11:0:3::1/64 dev net2
         - ip route add blackhole 10.0.0.0/8
         - ip route add blackhole fd00::/16
         # Boiler plate to make FRR work
@@ -68,12 +70,20 @@ topology:
         - chown frr:frr /var/log/frr.log
         - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
         - /usr/lib/frr/frrinit.sh start
+        # ipv6 addresses are configured in the router to persist across link/device failures
+        # 65000 will be replaced with 65010 when the routes are propogated further
         - >-
           vtysh -c 'conf t'
           -c 'log file /var/log/frr.log'
           -c 'debug bgp neighbor-events'
           -c 'debug bgp updates'
           -c 'debug bgp zebra'
+          -c 'interface net0'
+          -c 'ipv6 address fd00:11:0:1::1/64'
+          -c "interface net1"
+          -c 'ipv6 address fd00:11:0:2::1/64'
+          -c "interface net2"
+          -c 'ipv6 address fd00:11:0:3::1/64'
           -c 'router bgp 65011'
           -c '  bgp bestpath as-path multipath-relax'
           -c '  no bgp ebgp-requires-policy'
@@ -99,7 +109,7 @@ topology:
     server0:
       kind: linux
       image: nicolaka/netshoot:v0.11
-      network-mode: container:bgpv2-cplane-dev-homing-control-plane
+      network-mode: container:bgpv2-cplane-dev-mh-control-plane
       exec:
         - ip addr add 10.0.1.2/24 dev net0
         - ip addr add 10.11.1.2/24 dev net1
@@ -112,16 +122,17 @@ topology:
         - ip route append fd00::/16 via fd00:11:0:1::1 dev net1
         - ip route add fd00:10:0:0::1/128 via fd00:10:0:1::1 dev net0
         - ip route add fd00:11:0:0::1/128 via fd00:11:0:1::1 dev net1
+        # ipv4 default route without metric is 0
         - ip route replace default via 10.0.1.1 dev net0 metric 200
         - ip route replace default via 10.11.1.1 dev net1
+        # ipv6 default route without metric is 1024
         - ip route replace default via fd00:10:0:1::1 dev net0 metric 200
-        - ip route replace default via fd00:11:0:1::1 dev net1
-        # - ip link delete eth0
+        - ip route replace default via fd00:11:0:1::1 dev net1 metric 100
     # Server with Cilium. It shares netns with kind node.
     server1:
       kind: linux
       image: nicolaka/netshoot:v0.11
-      network-mode: container:bgpv2-cplane-dev-homing-worker
+      network-mode: container:bgpv2-cplane-dev-mh-worker
       exec:
         - ip addr add 10.0.2.2/24 dev net0
         - ip addr add 10.11.2.2/24 dev net1
@@ -137,7 +148,7 @@ topology:
         - ip route replace default via 10.0.2.1 dev net0 metric 200
         - ip route replace default via 10.11.2.1 dev net1
         - ip route replace default via fd00:10:0:2::1 dev net0 metric 200
-        - ip route replace default via fd00:11:0:2::1 dev net1
+        - ip route replace default via fd00:11:0:2::1 dev net1 metric 100
     # Server without Cilium. Useful for testing connectivity.
     server2:
       kind: linux
@@ -155,7 +166,7 @@ topology:
         - ip route add default via 10.0.3.1 dev net0 metric 100
         - ip route add default via 10.11.3.1 dev net1 metric 200
         - ip route replace default via fd00:10:0:3::1/64 dev net0 metric 200
-        - ip route replace default via fd00:11:0:3::1/64 dev net1
+        - ip route replace default via fd00:11:0:3::1/64 dev net1 metric 100
   links:
     - endpoints: ["router0:net0", "server0:net0"]
     - endpoints: ["router0:net1", "server1:net0"]

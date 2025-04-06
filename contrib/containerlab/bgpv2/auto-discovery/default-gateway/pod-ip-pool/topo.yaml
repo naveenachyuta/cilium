@@ -1,4 +1,4 @@
-name: bgpv2-cplane-dev-service
+name: bgpv2-cplane-dev-pod-ip-pool
 topology:
   nodes:
     # A simple BGP router that peers with Cilium with eBGP.
@@ -55,7 +55,7 @@ topology:
     server0:
       kind: linux
       image: nicolaka/netshoot:v0.11
-      network-mode: container:bgpv2-cplane-dev-service-control-plane
+      network-mode: container:bgpv2-cplane-dev-pod-ip-pool-control-plane
       exec:
       - ip addr add 10.0.1.2/24 dev net0
       - ip addr add fd00:10:0:1::2/64 dev net0
@@ -67,7 +67,7 @@ topology:
     server1:
       kind: linux
       image: nicolaka/netshoot:v0.11
-      network-mode: container:bgpv2-cplane-dev-service-worker
+      network-mode: container:bgpv2-cplane-dev-pod-ip-pool-worker
       exec:
       - ip addr add 10.0.2.2/24 dev net0
       - ip addr add fd00:10:0:2::2/64 dev net0

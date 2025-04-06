@@ -11,15 +11,15 @@ spec:
   - name: "65001"
     localASN: 65001
     peers:
-    - name: "65000 ipv4"
-      peerASN: 65000
-      autoDiscovery:
-        mode: "default-gateway"
-        defaultGateway:
-          addressFamily: ipv4
-      peerConfigRef:
-        name: "cilium-peer"
-    - name: "65000 ipv6"
+    # - name: "ipv4 65000"
+    #   peerASN: 65000
+    #   autoDiscovery:
+    #     mode: "default-gateway"
+    #     defaultGateway:
+    #       addressFamily: ipv4
+    #   peerConfigRef:
+    #     name: "cilium-peer"
+    - name: "ipv6 65000"
       peerASN: 65000
       autoDiscovery:
         mode: "default-gateway"
@@ -27,12 +27,6 @@ spec:
           addressFamily: ipv6
       peerConfigRef:
         name: "cilium-peer"
-    # - name: "65011"
-    #   peerASN: 65011
-    #   # peerAddress: fd00:11::1
-    #   peerConfigRef:
-    #     name: "cilium-peer"
-
 ---
 apiVersion: cilium.io/v2
 kind: CiliumBGPPeerConfig
@@ -65,15 +59,12 @@ metadata:
 spec:
   advertisements:
     - advertisementType: "PodCIDR"
-      attributes:
-        communities:
-          wellKnown: [ "no-export" ]
 
 ---
 apiVersion: cilium.io/v2
 kind: CiliumBGPNodeConfigOverride
 metadata:
-  name: bgpv2-cplane-dev-homing-control-plane
+  name: bgpv2-cplane-dev-mh-control-plane
 spec:
   bgpInstances:
     - name: "65001"
@@ -83,7 +74,7 @@ spec:
 apiVersion: cilium.io/v2
 kind: CiliumBGPNodeConfigOverride
 metadata:
-  name: bgpv2-cplane-dev-homing-worker
+  name: bgpv2-cplane-dev-mh-worker
 spec:
   bgpInstances:
     - name: "65001"

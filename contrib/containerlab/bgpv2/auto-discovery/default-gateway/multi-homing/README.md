@@ -22,14 +22,6 @@ CiliumBGPPeerConfig resource with name `cilium-peer`.
   - name: "65001"
     localASN: 65001
     peers:
-    - name: "65000 ipv4"
-      peerASN: 65000
-      autoDiscovery:
-        mode: "default-gateway"
-        defaultGateway:
-          addressFamily: ipv4
-      peerConfigRef:
-        name: "cilium-peer"
     - name: "65000 ipv6"
       peerASN: 65000
       autoDiscovery:
@@ -64,13 +56,10 @@ which matches the label "advertise=pod-cidr".
 
 **BGP advertisement**
 
-Snippet of 'PodCIDR' advertisement is defined below. BGP control plane will advertise pod cidr prefix with BGP community attribute of 'no-export'.
+Snippet of 'PodCIDR' advertisement is defined below. BGP control plane will advertise pod cidr prefix
 
 ```yaml
     - advertisementType: "PodCIDR"
-      attributes:
-        communities:
-          wellKnown: [ "no-export" ]
 ```
 
 **BGP node configuration override**
@@ -106,24 +95,19 @@ Verification
 **BGP Peering**
 
 ```
-root@bgpv2-cplane-dev-multi-homing-worker:/home/cilium# cilium bgp peers
-Local AS   Peer AS   Peer Address     Session       Uptime   Family         Received   Advertised
-65001      65000     fd00:10::1:179   established   4m45s    ipv4/unicast   0          2
-                                                             ipv6/unicast   0          2
-65001      65011     fd00:11::1:179   established   4m47s    ipv4/unicast   0          2
-                                                             ipv6/unicast   0          2
+root@bgpv2-cplane-dev-mh-worker:/home/cilium# cilium bgp peers
+Local AS   Peer AS   Peer Address         Session       Uptime   Family         Received   Advertised
+65001      65000     fd00:11:0:2::1:179   established   21m55s   ipv4/unicast   2          2    
+                                                                 ipv6/unicast   2          2 
 
 ```
 
 **BGP Routes**
 
-PodCIDR is 10.1.1.0 on this node, which is advertised with communities attribute 'no-export'.
-
 ```
-root@bgpv2-cplane-dev-multi-homing-worker:/home/cilium# cilium bgp routes advertised ipv4 unicast
-VRouter   Peer         Prefix        NextHop          Age     Attrs
-65001     fd00:10::1   10.1.1.0/24   fd00:10:0:2::2   5m35s   [{Origin: i} {AsPath: 65001} {Communities: no-export} {MpReach(ipv4-unicast): {Nexthop: fd00:10:0:2::2, NLRIs: [10.1.1.0/24]}}]
-65001     fd00:11::1   10.1.1.0/24   fd00:11:0:2::2   5m35s   [{Origin: i} {AsPath: 65001} {Communities: no-export} {MpReach(ipv4-unicast): {Nexthop: fd00:11:0:2::2, NLRIs: [10.1.1.0/24]}}]
+root@bgpv2-cplane-dev-mh-worker:/home/cilium# cilium bgp routes advertised ipv4 unicast
+VRouter   Peer             Prefix        NextHop          Age      Attrs
+65001     fd00:11:0:2::1   10.1.1.0/24   fd00:11:0:2::2   22m18s   [{Origin: i} {AsPath: 65001} {MpReach(ipv4-unicast): {Nexthop: fd00:11:0:2::2, NLRIs: [10.1.1.0/24]}}] 
 ```
 
 On peering routers we can see 10.1.1.0/24 prefix with appropriate route attributes and configured router ID.
@@ -131,27 +115,63 @@ On peering routers we can see 10.1.1.0/24 prefix with appropriate route attribut
 **FRR Router0**
 
 ```
- docker exec -it clab-bgpv2-cplane-dev-multi-homing-router0 vtysh -c 'sh bgp ipv4 10.1.1.0'
-BGP routing table entry for 10.1.1.0/24, version 2
-Paths: (1 available, best #1, table default, not advertised to EBGP peer)
-  Not advertised to any peer
-  65001
-    fd00:10:0:2::2 from fd00:10:0:2::2 (5.6.7.8)               <<<<<<<<< Router ID
-      Origin IGP, valid, external, best (First path received)
-      Community: no-export                                     <<<<<<<<< Community
-      Last update: Fri Jun 28 15:30:33 2024
+ docker exec -it clab-bgpv2-cplane-dev-mh-router0 vtysh -c 'sh bgp ipv4 10.1.1.0'
+% Network not in table
 ```
 
 **FRR Router1**
 
 ```
-docker exec -it clab-bgpv2-cplane-dev-multi-homing-router1 vtysh -c 'sh bgp ipv4 10.1.1.0'
-BGP routing table entry for 10.1.1.0/24, version 1
-Paths: (1 available, best #1, table default, not advertised to EBGP peer)
-  Not advertised to any peer
+docker exec -it clab-bgpv2-cplane-dev-mh-router1 vtysh -c 'sh bgp ipv4 10.1.1.0'
+BGP routing table entry for 10.1.1.0/24, version 2
+Paths: (1 available, best #1, table default)
+  Advertised to non peer-group peers:
+  fd00:11:0:1::2 fd00:11:0:2::2
   65001
-    fd00:11:0:2::2 from fd00:11:0:2::2 (5.6.7.8)
+    fd00:11:0:2::2 from fd00:11:0:2::2 (5.6.7.8)               <<<<<<<<< Router ID
       Origin IGP, valid, external, best (First path received)
-      Community: no-export
-      Last update: Fri Jun 28 15:30:31 2024
+      Last update: Sat Apr  5 23:37:36 2025
+```
+
+After shutting down interface in router1, cilium worker will failover to the other router i.e router0
+
+**BGP Peering**
+
+```
+root@bgpv2-cplane-dev-mh-worker:/home/cilium# cilium bgp peers
+Local AS   Peer AS   Peer Address         Session       Uptime   Family         Received   Advertised
+65001      65000     fd00:10:0:2::1:179   established   42s      ipv4/unicast   2          2    
+                                                                 ipv6/unicast   2          2  
+
+```
+
+**BGP Routes**
+
+```
+root@bgpv2-cplane-dev-mh-worker:/home/cilium# cilium bgp routes advertised ipv4 unicast
+VRouter   Peer             Prefix        NextHop          Age     Attrs
+65001     fd00:10:0:2::1   10.1.1.0/24   fd00:10:0:2::2   3m26s   [{Origin: i} {AsPath: 65001} {MpReach(ipv4-unicast): {Nexthop: fd00:10:0:2::2, NLRIs: [10.1.1.0/24]}}] 
+```
+
+On one of the peering router we can see 10.1.1.0/24 prefix with appropriate route attributes and configured router ID.
+
+**FRR Router0**
+
+```
+ docker exec -it clab-bgpv2-cplane-dev-mh-router0 vtysh -c 'sh bgp ipv4 10.1.1.0'
+BGP routing table entry for 10.1.1.0/24, version 2
+Paths: (1 available, best #1, table default)
+  Advertised to non peer-group peers:
+  fd00:10:0:1::2 fd00:10:0:2::2
+  65001
+    fd00:10:0:2::2 from fd00:10:0:2::2 (5.6.7.8)
+      Origin IGP, valid, external, best (First path received)
+      Last update: Sun Apr  6 00:27:43 2025
+```
+
+**FRR Router1**
+
+```
+docker exec -it clab-bgpv2-cplane-dev-mh-router1 vtysh -c 'sh bgp ipv4 10.1.1.0'
+% Network not in table
 ```
