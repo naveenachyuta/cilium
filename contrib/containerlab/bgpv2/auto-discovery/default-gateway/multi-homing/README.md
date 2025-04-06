@@ -136,7 +136,7 @@ Paths: (1 available, best #1, table default)
 Failover
 ------------
 
-if the interface in router1 connected to worker goes down or its shut down, worker will failover to the other router i.e router0
+if the default route fails for any reason like interface going down, it will trigger a reconciliation and worker will failover to the other router i.e router0
 
 **BGP Peering**
 

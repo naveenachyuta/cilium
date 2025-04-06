@@ -91,9 +91,8 @@ func (id RouteID) Key() index.Key {
 }
 
 type Route struct {
-	Table      RouteTable
-	LinkIndex  int
-	LinkStatus string // "up" or "down"
+	Table     RouteTable
+	LinkIndex int
 
 	Scope    uint8
 	Dst      netip.Prefix

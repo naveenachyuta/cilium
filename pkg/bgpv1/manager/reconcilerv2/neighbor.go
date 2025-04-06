@@ -147,6 +147,8 @@ func (r *NeighborReconciler) Cleanup(i *instance.BGPInstance) {
 	}
 }
 
+// getDefaultGateway returns the default gateway address with lower priority using route and device
+// statedb tables and the provided default gateway configuration.
 func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway) (string, error) {
 	var defaultRoute string
 	switch defaultGateway.AddressFamily {
@@ -196,32 +198,6 @@ func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway
 			r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
 			defaultRoutes = append(defaultRoutes, ro)
 		}
-		// if ro[routeIdxs["Destination"]] == netip.PrefixFrom(netip.IPv4Unspecified(), 0).String() && addressFamily == "ipv4" {
-		// 	matched := validDefaultRoute(ro, routeIdxs, deviceObjs, deviceIdxs)
-		// 	if !matched {
-		// 		continue
-		// 	}
-		// 	r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
-		// 	defaultRoutes = append(defaultRoutes, ro)
-
-		// } else if ro[routeIdxs["Destination"]] == netip.PrefixFrom(netip.IPv6Unspecified(), 0).String() && addressFamily == "ipv6" {
-		// 	matched := validDefaultRoute(ro, routeIdxs, deviceObjs, deviceIdxs)
-		// 	if !matched {
-		// 		continue
-		// 	}
-		// 	r.logger.Debug("default gateway found", "gateway", ro[routeIdxs["Gateway"]])
-		// 	defaultRoutes = append(defaultRoutes, ro)
-		// for deviceObj := range deviceObjs {
-		// 	row2 := deviceObj.(statedb.TableWritable).TableRow()
-		// 	if row2[deviceIdxs["Index"]] == ro[idxs["LinkIndex"]] {
-		// 		if row2[deviceIdxs["OperStatus"]] == "up" {
-		// 			r.logger.Debug("Default gateway found2222", "gateway", ro[idxs["Gateway"]])
-		// 			defaultRoutes = append(defaultRoutes, ro)
-		// 			break
-		// 		}
-		// 	}
-		// }
-		// }
 	}
 	if len(defaultRoutes) == 0 {
 		return "", fmt.Errorf("failed to get default gateways from route table")
@@ -496,6 +472,7 @@ func (r *NeighborReconciler) neighborID(n *v2.CiliumBGPNodePeer) string {
 	return fmt.Sprintf("%s%s%d", n.Name, *n.PeerAddress, *n.PeerASN)
 }
 
+// getColumnIndexes returns a map of column names to their indexes in the header
 func getColumnIndexes(names []string, header []string) (map[string]int, error) {
 	columnIndexes := make(map[string]int)
 loop:

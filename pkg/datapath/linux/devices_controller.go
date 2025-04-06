@@ -469,11 +469,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 		for _, u := range updates {
 			switch u := u.(type) {
 			case netlink.AddrUpdate:
-				dc.log.Debug("Addr update received",
-					"linkAddress", u.LinkAddress,
-					"flags", u.Flags,
-					"linkdown_flag", u.Flags&unix.RTNH_F_LINKDOWN != 0,
-					"dead_flag", u.Flags&unix.RTNH_F_DEAD != 0)
 				if dc.deadLinkIndexes.Has(u.LinkIndex) {
 					continue
 				}
@@ -488,16 +483,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 				}
 				deviceUpdated = true
 			case netlink.RouteUpdate:
-				dc.log.Debug("Route update received",
-					"linkIndex", u.LinkIndex,
-					"flags", u.Flags,
-					"route_flags", u.Route.Flags,
-					"linkdown_flag", u.Flags&unix.RTNH_F_LINKDOWN != 0,
-					"dead_flag", u.Flags&unix.RTNH_F_DEAD != 0)
-				for _, mp := range u.MultiPath {
-					fmt.Println("next hop info", mp.Flags)
-					fmt.Println("more next hope info", mp.Hops, mp.Gw)
-				}
 				if dc.deadLinkIndexes.Has(u.LinkIndex) {
 					// Ignore route updates for a device that has been removed
 					// to avoid processing an out of order route create after
@@ -505,9 +490,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					// of routes deleted when link is deleted).
 					continue
 				}
-
-				fmt.Println(u.Dst, u.Gw, "test12344556", u.Type, u.ListFlags())
-				fmt.Printf("%d", u.Flags)
 				r := tables.Route{
 					Table:     tables.RouteTable(u.Table),
 					LinkIndex: index,
@@ -515,7 +497,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					Dst:       ipnetToPrefix(u.Family, u.Dst),
 					Priority:  u.Priority,
 				}
-
 				r.Src, _ = netip.AddrFromSlice(u.Src)
 				r.Gw, _ = netip.AddrFromSlice(u.Gw)
 
@@ -537,11 +518,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					}
 				}
 			case netlink.NeighUpdate:
-				dc.log.Debug("Neighbor update received",
-					"linkIndex", u.Neigh,
-					"flags", u.Flags,
-					"linkdown_flag", u.Flags&unix.RTNH_F_LINKDOWN != 0,
-					"dead_flag", u.Flags&unix.RTNH_F_DEAD != 0)
 				if dc.deadLinkIndexes.Has(u.LinkIndex) {
 					// Ignore neighbor updates for a device that has been removed
 					continue
@@ -581,11 +557,6 @@ func (dc *devicesController) processBatch(txn statedb.WriteTxn, batch map[int][]
 					}
 				}
 			case netlink.LinkUpdate:
-				dc.log.Debug("Link update received",
-					"linkIndex", u.Link.Attrs(),
-					"flags", u.Flags,
-					"linkdown_flag", u.Flags&unix.RTNH_F_LINKDOWN != 0,
-					"dead_flag", u.Flags&unix.RTNH_F_DEAD != 0)
 				if u.Header.Type == unix.RTM_DELLINK {
 					// Mark for deletion.
 					dc.deadLinkIndexes.Insert(d.Index)

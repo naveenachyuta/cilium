@@ -24,6 +24,3 @@ operator:
   replicas: 1
 
 hostNetwork: true
-
-# # Ensure Cilium can access the host's network devices
-# devices: "*"

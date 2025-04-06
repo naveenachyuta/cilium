@@ -98,13 +98,6 @@ topology:
           -c '  bgp listen range fd00:11:0:1::/64 peer-group CILIUM'
           -c '  bgp listen range fd00:11:0:2::/64 peer-group CILIUM'
           -c '!'
-          
-    # route-map SET_METRIC permit 10
-#  set metric 100
-
-# router bgp 65100
-#  bgp router-id 10.1.1.1
-#  neighbor 192.0.2.1 route-map SET_METRIC in
     # Server with Cilium. It shares netns with kind node.
     server0:
       kind: linux
@@ -174,16 +167,3 @@ topology:
     - endpoints: ["router1:net0", "server0:net1"]
     - endpoints: ["router1:net1", "server1:net1"]
     - endpoints: ["router1:net2", "server2:net1"]
-
-
-# # Backup the current config to a file
-# docker exec $ROUTER_NAME vtysh -c "show running-config" > frr_backup.conf
-
-# # Stop FRR
-# docker exec $ROUTER_NAME /usr/lib/frr/frrinit.sh stop
-
-# # Start FRR
-# docker exec $ROUTER_NAME /usr/lib/frr/frrinit.sh start
-
-# # Restore the configuration
-# cat frr_backup.conf | docker exec -i $ROUTER_NAME vtysh -c "config terminal" -c "$(cat -)"
