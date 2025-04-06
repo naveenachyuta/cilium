@@ -88,6 +88,10 @@ kind-bgpv2-dg-service-apply-bgp:
 kind-bgpv2-dg-service-apply-service:
 	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service apply-service
 
+.PHONY: kind-bgpv2-dg-lb-pool-apply-policy
+kind-bgpv2-dg-lb-pool-apply-policy:
+	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/service apply-lb
+
 .PHONY: kind-bgpv2-dg-multi-homing
 kind-bgpv2-dg-multi-homing:
 	$(QUIET) $(MAKE) -C contrib/containerlab/bgpv2/auto-discovery/default-gateway/multi-homing deploy

@@ -157,6 +157,7 @@ func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway
 	default:
 		return "", fmt.Errorf("invalid address family %s", defaultGateway.AddressFamily)
 	}
+	// get routes from statedb route table
 	txn := r.DB.ReadTxn()
 	routeMeta := r.DB.GetTable(txn, "routes")
 	routeTbl := statedb.AnyTable{Meta: routeMeta}
@@ -169,6 +170,7 @@ func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway
 		return "", fmt.Errorf("failed to get column indexes for route table: %w", err)
 	}
 
+	// get links from statedb device table
 	deviceMeta := r.DB.GetTable(txn, "devices")
 	deviceTbl := statedb.AnyTable{Meta: deviceMeta}
 	deviceObjs := deviceTbl.All(txn)
@@ -183,7 +185,7 @@ func (r *NeighborReconciler) getDefaultGateway(defaultGateway *v2.DefaultGateway
 	defaultRoutes := [][]string{}
 	for routeObj := range routeObjs {
 		ro := routeObj.(statedb.TableWritable).TableRow()
-		if ro[routeIdxs["Gateway"]] == "" && ro[routeIdxs["Destination"]] == "" {
+		if ro[routeIdxs["Gateway"]] == "" || ro[routeIdxs["Destination"]] == "" {
 			continue
 		}
 		if ro[routeIdxs["Destination"]] == defaultRoute {
@@ -272,6 +274,7 @@ func (r *NeighborReconciler) Reconcile(ctx context.Context, p ReconcileParams) e
 		}
 
 		if n.PeerAddress == nil {
+			// future auto-discovery modes can be added here to get the peer address
 			switch n.AutoDiscovery.Mode {
 			case "default-gateway":
 				defaultGateway, err := r.getDefaultGateway(n.AutoDiscovery.DefaultGateway)
@@ -508,6 +511,7 @@ loop:
 	return columnIndexes, nil
 }
 
+// validDefaultRoute checks if the interface through which the default route is reachable is up
 func validDefaultRoute(ro []string, routeIdxs map[string]int, deviceObjs iter.Seq2[any, statedb.Revision], deviceIdxs map[string]int) bool {
 	for deviceObj := range deviceObjs {
 		do := deviceObj.(statedb.TableWritable).TableRow()

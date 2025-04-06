@@ -133,7 +133,10 @@ Paths: (1 available, best #1, table default)
       Last update: Sat Apr  5 23:37:36 2025
 ```
 
-After shutting down interface in router1, cilium worker will failover to the other router i.e router0
+Failover
+------------
+
+if the interface in router1 connected to worker goes down or its shut down, worker will failover to the other router i.e router0
 
 **BGP Peering**
 

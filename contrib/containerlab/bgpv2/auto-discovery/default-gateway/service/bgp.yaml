@@ -22,15 +22,7 @@ spec:
   - name: "65001"
     localASN: 65001
     peers:
-    - name: "ipv4 65000"
-      peerASN: 65000
-      autoDiscovery:
-        mode: "default-gateway"
-        defaultGateway:
-          addressFamily: ipv4
-      peerConfigRef:
-        name: "cilium-peer"
-    - name: "ipv6 65000"
+    - name: "65000"
       peerASN: 65000
       autoDiscovery:
         mode: "default-gateway"

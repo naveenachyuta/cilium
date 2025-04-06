@@ -24,3 +24,5 @@ k8s:
 operator:
   enabled: true
   replicas: 1
+
+hostNetwork: true

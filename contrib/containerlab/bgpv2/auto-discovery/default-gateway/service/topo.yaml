@@ -14,6 +14,9 @@ topology:
       - ip link add name loopback type dummy
       - ip link set dev loopback up
       - ip addr add fd00:10:0:0::1/128 dev loopback
+      - ip addr add fd00:10:0:1::1/64 dev net0
+      - ip addr add fd00:10:0:2::1/64 dev net1
+      - ip addr add fd00:10:0:3::1/64 dev net2
       - ip route add blackhole 10.0.0.0/8
       - ip route add blackhole fd00::/16
       # Boiler plate to make FRR work
@@ -36,7 +39,7 @@ topology:
         -c 'ipv6 address fd00:10:0:2::1/64'
         -c "interface net2"
         -c 'ipv6 address fd00:10:0:3::1/64'
-        -c 'router bgp 65000'
+        -c 'router bgp 65010'
         -c '  bgp bestpath as-path multipath-relax'
         -c '  no bgp ebgp-requires-policy'
         -c '  bgp default ipv6-unicast'
@@ -63,6 +66,7 @@ topology:
       - ip route add 10.0.0.0/8 via 10.0.1.1 dev net0
       - ip route add fd00::/16 via fd00:10:0:1::1 dev net0
       - ip route replace default via 10.0.1.1 dev net0
+      - ip route replace default via fd00:10:0:1::1 dev net0
     # Server with Cilium. It shares netns with kind node.
     server1:
       kind: linux
@@ -72,10 +76,11 @@ topology:
       - ip addr add 10.0.2.2/24 dev net0
       - ip addr add fd00:10:0:2::2/64 dev net0
       # These static routes are needed because Cilium cannot import routes currently.
-      - ip route add fd00:10:0:0::1/128 via fd00:10:0:1::1 dev net0 # loopback of router0
+      - ip route add fd00:10:0:0::1/128 via fd00:10:0:2::1 dev net0 # loopback of router0
       - ip route add 10.0.0.0/8 via 10.0.2.1 dev net0
       - ip route add fd00::/16 via fd00:10:0:2::1 dev net0
       - ip route replace default via 10.0.2.1 dev net0
+      - ip route replace default via fd00:10:0:2::1 dev net0
     # Server without Cilium. Useful for testing connectivity.
     server2:
       kind: linux
@@ -86,6 +91,7 @@ topology:
       # These static routes are needed because this node doesn't have a BGP router.
       - ip route add 10.0.0.0/8 via 10.0.3.1 dev net0
       - ip route add fd00::/16 via fd00:10:0:3::1 dev net0
+      - ip route replace default via fd00:10:0:3::1/64 dev net0
   links:
   - endpoints: ["router0:net0", "server0:net0"]
   - endpoints: ["router0:net1", "server1:net0"]

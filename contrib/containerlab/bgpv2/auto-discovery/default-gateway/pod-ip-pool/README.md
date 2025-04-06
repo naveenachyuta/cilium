@@ -29,6 +29,7 @@ BGP Resources
 **BGP Instance**
 
 Single BGP peer is defined in the BGP cluster configuration. This will be applied to both Control-Plane and Worker nodes ( matching on node selector label ).
+It will use auto discovery with default gateway mode to discover peer address.
 
 ```yaml
   - name: "65001"
@@ -36,7 +37,10 @@ Single BGP peer is defined in the BGP cluster configuration. This will be applie
     peers:
     - name: "65000"
       peerASN: 65000
-      peerAddress: fd00:10::1
+      autoDiscovery:
+        mode: "default-gateway"
+        defaultGateway:
+          addressFamily: ipv6
       peerConfigRef:
         name: "cilium-peer"
 ```
@@ -63,8 +67,7 @@ In below example, both v4 and v6 families have advertisement label selector of "
 
 **BGP Advertisement**
 
-BGP Advertisement resource has two different pool settings. One for blue pool and another for red, both are used to advertise prefix from respective
-pools but with different BGP attributes.
+BGP Advertisement resource has two different pool settings. One for blue pool and another for red, both are used to advertise prefix from respective pools but with different BGP attributes.
 
 ```yaml
   advertisements:
