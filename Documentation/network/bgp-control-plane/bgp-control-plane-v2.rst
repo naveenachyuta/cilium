@@ -99,7 +99,7 @@ Cilium BGP Control Plane currently supports default-gateway mode for auto-discov
 Default Gateway Auto-Discovery
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The default gateway auto-discovery mode allows Cilium to automatically discover and establish BGP sessions with the default gateway (typically a Top-of-Rack switch) for a specified address family.
+The default gateway auto-discovery mode allows Cilium to automatically discover and establish BGP session with the default gateway (typically a Top-of-Rack switch) for a specified address family.
 
 To enable default gateway auto-discovery, configure the ``autoDiscovery`` field in the peer configuration:
 
